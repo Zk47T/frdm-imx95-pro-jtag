@@ -18,12 +18,15 @@
 ```
 ocd.sh trace / cs_trace_start(..., configr, ccctlr)   ETM -> ETF -> ETR -> DRAM
   -> readout: AHB-AP over SWD 5 MHz memaccess 2 (276 KiB/s), or physwin + JTAG above 4 GB
-trace/mksnap.py      snapshot (buffer rotated at RWP, ETM registers, vmlinux + ELF images) + OpenCSD decode
-trace/tracetool.py index      call stack rebuilt from the decoded control flow  -> index.npz
-                   perfetto   nested function slices on a real time axis       -> trace.perfetto.json
-                   speedscope the same as an evented profile                   -> trace.speedscope.json
-                   folded     stacks weighted by CPU cycles (or instructions)  -> trace.folded -> flamegraph.svg
+trace/mksnap.py      snapshot (buffer rotated at RWP, ETM registers, the live kernel text or vmlinux,
+                     ELF images, the PID map) + OpenCSD decode
+trace/tracetool.py index      call stacks rebuilt per core and per task, one decoder process per core,
+                              each core's span in time and its tasks       -> index.npz
+                   perfetto   per core: tasks + nested function slices      -> trace.perfetto-trace
+                   speedscope the same as an evented profile                -> trace.speedscope.json
+                   folded     stacks per core and task, by cycles or instructions -> trace.folded -> flamegraph.svg
                    nav        step forward/back, with source, disassembly, call stack
+--window FROM TO (ms from the capture start) on perfetto/speedscope/folded: every core over the same interval
 ```
 
 **Rebuilding the call stack:**
@@ -31,8 +34,9 @@ trace/tracetool.py index      call stack rebuilt from the decoded control flow  
 - A call pushes and a return pops. A jump into another function replaces the top, because it's a tail call.
 - An exception pushes a marker and the vector code; the exception return pops back to the marker.
 - **Perfetto output:**
-- **Begin/End events in call order**, one track per core with `tid = 10 + core`.
-- **Times on an integer-ns grid** from the earliest instruction.
+- **Begin/End events in call order**, one track per core (and a tasks track when the trace has PIDs).
+- **Times on an integer-ns grid** from the earliest instruction of any core.
+- **Perfetto's own protobuf format by default** (`--format json` for other viewers). The whole T7 buffer (82 M instructions, 1.7 M slices) is 90 MB, where the JSON would be about 345 MB. Both formats of one window give identical slices (count, Σts, Σdur, Σdepth). `[V]`
 - **Two traps found with Perfetto's trace processor:**
   - complete (X) events at absolute times near 1.8×10⁹ µs rounded a parent's end past its tail-called child's start;
   - `tid 0` is taken as the process's main thread and merged core 0 into core 1.
@@ -68,7 +72,7 @@ dd_main → dd_read → safe_read → read            (busybox, EL0)
 
 | View | Open with | Shows |
 |---|---|---|
-| `trace.perfetto.json` | https://ui.perfetto.dev (the file stays in the browser) | a timeline of nested function slices; zoom to single calls; durations; args = instructions and first instruction index |
+| `trace.perfetto-trace` | https://ui.perfetto.dev (the file stays in the browser) | per core: the running task, then nested function slices; zoom to single calls; durations; args = instructions and first instruction index |
 | `trace.speedscope.json` | https://www.speedscope.app (local) | time order, left-heavy (merged) and sandwich (callers/callees of one function) |
 | `flamegraph.svg` | any browser | where the cycles go, by stack |
 | `tracetool.py nav SNAP [N]` | terminal | the history at instruction level |
@@ -106,20 +110,51 @@ TRACE32 is ahead in **analysis software**, not in access: on this chip it reads 
 | trace listing with source, back and forth | `tracetool nav` (text) | a GUI pane synced with the timeline |
 | function timing, nesting, statistics | Perfetto, speedscope, folded/flame graph | per-function min/max/avg tables (from `index.npz`) |
 | CTS: registers and variables at past points | — (no data trace) | re-execute from a snapshot: halt at the start (registers + memory windows), then emulate (e.g. Unicorn) along the traced path, checking every branch against the trace |
-| multicore time correlation | **done**: six cores, one Perfetto track each, aligned on the common timestamps ([04](04-arm-trace-into-dram.md) §8) | cycle counts on all cores at once (bandwidth: use filters or stall) |
+| multicore time correlation | **done**: six cores, one Perfetto track each, aligned on the common timestamps and ending together ([04](04-arm-trace-into-dram.md) §7) | cycle counts on all cores at once (bandwidth: use filters or stall) |
 | code coverage | — | mark every executed range against `vmlinux`'s functions/lines |
-| OS awareness (tasks) | — | Context ID tracing (TRCCONFIGR.CID) gives the PID per range; map it to `comm` |
+| OS awareness (tasks) | **done**: the PID from CONTEXTIDR_EL2 (traced as the VMID), names from `/proc/*/comm`, a tasks track per core, one call stack per task (§5b) | the user programs' own functions: per-process images from `/proc/PID/maps` |
 | triggers, filters | — | address-range include/exclude (TRCVIIECTLR + TRCACVRn), start/stop on an address |
 
 **Practical order:**
-1. CID tracing and per-process tracks.
+1. ~~Per-process tracks~~ (done, §5b).
 2. ~~All six cores~~ (done).
 3. Address filters to record one subsystem across a boot (e.g. the DSI/ATTINY probe).
 4. Then the emulation-based register view, if it's still wanted.
+
+## 5b. A real system (T9) `[V]`
+
+The board's own image under real work: [04](04-arm-trace-into-dram.md) §8. What the decode had to learn:
+
+- **The live kernel text** (`mksnap.py --kernel-live`, from `ocd.sh ktext`):
+  - Linux patches 0.4 % of its text at boot.
+  - Against `vmlinux`, returns in the patched lock/atomic helpers are lost and the call stacks grow to 597 deep. With the live text they stay at 25–47.
+- **User code without an image:** the programs are dynamically linked and loaded with ASLR, so OpenCSD reports `ADDR_NACC`. Each stretch becomes one slice, `sha256sum [1056] (user code)`, and the kernel nests under it.
+- **Idle:**
+  - `TRACE_ON [begin or filter]` is the ETM pausing while the core is in WFI. It isn't lost trace, so the call stack is kept, and the sleep becomes `[WFI: core asleep]`.
+  - With `NO_HZ_IDLE` an idle core can write nothing at all: in T9 core 5 has an empty, labelled track.
+- **Task switches:**
+  - The PID (CONTEXTIDR_EL2, traced as the VMID) changes in `__switch_to`, and each task keeps its own call stack.
+  - A single stack piled each task's frames onto the previous one.
+- **Time where nothing can be counted** (a sleep, user code): the next timestamp gives that row the time between the two timestamps, minus what the counted kernel instructions need at 1.8 per ns.
+- **Checked against the board:**
+  - eMMC interrupts appear only on core 0, as `/proc/interrupts` says.
+  - About 12 timer ticks per core in 50.7 ms matches HZ=250.
+
+```
+core 0  idle 99 %   WFI; sdhci_irq -> mmc_request_done -> queue_work; kworker/0:1H-mmc_complete
+core 1  idle        asleep from 20 ms on
+core 2  idle        rtt-console polling
+core 3  sha256sum   user code, read() every ~80 us: ext4 -> readahead -> blk-mq -> mmc
+core 4  udevadm     openat/write on sysfs uevent files
+core 5  (no trace)  asleep the whole 50.7 ms
+```
 
 ## 6. Lessons
 
 1. **Check the decoder's output against the hardware.** The instruction count matched the loop
    exactly, and the cycle count matched both the dual-issue and the PLL. Only then are the pictures worth looking at.
 2. **Timestamps give absolute time; cycle counts give the shape.** Interpolating timestamps by instructions misleads at short scales.
-3. **The expensive part of TRACE32 is reproducible in pieces:** Perfetto and speedscope already are good viewers. What they lack is the instruction/source pane and data reconstruction.
+3. **A pinned synthetic loop gives a picture that looks fake, because it is regular.** A real
+   system shows idle cores, task switches, interrupts and user code that can't be followed
+   without its images (§5b).
+4. **The expensive part of TRACE32 is reproducible in pieces:** Perfetto and speedscope already are good viewers. What they lack is the instruction/source pane and data reconstruction.

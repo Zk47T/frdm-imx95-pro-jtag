@@ -14,11 +14,11 @@ A local git repository (2026-10-16); its history starts with the import from elb
 | Reset from afar | MDM-AP `JTAG_SW_RST` (full SoC reset) or the SM monitor `reset` | [01](docs/01-jtag-bringup.md) §5 `[V]` |
 | Linux without flashing | U-Boot over SDP, then the DSI kernel + a JTAG DTB + an initramfs from RAM; eMMC untouched | [02](docs/02-linux-without-a-console.md) `[V]` |
 | Shell over JTAG | RTT console works; **one board hang while it was in use, open** | [02](docs/02-linux-without-a-console.md) §4 `[V]` `[?]` |
-| **ARM trace** | **ETM → ETF → ETR into a 2 GB DRAM buffer, 1.58 GiB in 8 s; decoded with OpenCSD, 0 errors; instruction count matches the code to 1 in 3,074**; Linux's own CoreSight driver panics this BSP | [04](docs/04-arm-trace-into-dram.md) `[V]` |
+| **ARM trace** | **ETM → ETF → ETR into a 2 GB DRAM buffer, 1.58 GiB in 8 s; decoded with OpenCSD, 0 errors; instruction count matches the code to 1 in 3,074**; all six cores into one buffer, stopped at the sink so they end together; **decoded against the live kernel text** (Linux patches 0.4 % of it at boot); Linux's own CoreSight driver panics this BSP | [04](docs/04-arm-trace-into-dram.md) `[V]` |
 | **DSI** | dark because the panel's 3.3 V needs U17 (PCAL6524, I2C4), and **no device on I2C3 or I2C4 answers**; the SoC side of both buses is proven healthy; the 2026-09-15 "lines held low" was a measurement artefact | [03](docs/03-dsi-and-the-i2c-fault.md) `[V]` |
 | Probe | CH347F clean to **60 MHz** JTAG; SWD works; best bulk read **276 KiB/s (SWD 5 MHz, memaccess 2)**; JTAG capped ~105 KiB/s by the chip's bit mode | [07](docs/07-ch347f-m7-and-other-probes.md) `[V]` |
 | M7 | examined, halted, resumed and debugged with gdb through OpenOCD's port 3334, over the same JTAG; usable from MCUXpresso/VS Code as a GDB server | [07](docs/07-ch347f-m7-and-other-probes.md) §2 `[V]` |
-| Trace views | **all six A55 cores at once** (one Perfetto track each; overflow when 5 are busy); call stack rebuilt from the trace; Perfetto timeline, speedscope, cycle-weighted flame graph, and a navigator that steps forward and back with source; **timestamps (6.144 G/s) and cycle counts (1.807 GHz) verified** | [08](docs/08-trace-visualisation.md) `[V]` |
+| Trace views | **all six A55 cores at once**, and **the board's real system with the running process on every core** (PID from CONTEXTIDR_EL2; idle, interrupts, task switches, user code; checked against `/proc/interrupts`); whole buffers in Perfetto's protobuf format; overflow when 5 are busy; call stack rebuilt from the trace; Perfetto timeline, speedscope, cycle-weighted flame graph, and a navigator that steps forward and back with source; **timestamps (6.144 G/s) and cycle counts (1.807 GHz) verified** | [08](docs/08-trace-visualisation.md) `[V]` |
 | Next for the owner | meter checks in [03](docs/03-dsi-and-the-i2c-fault.md) §6; option: fit R75 + R194 to power the panel without U17; CH347F I2C on J6 to probe U17 directly ([07](docs/07-ch347f-m7-and-other-probes.md) §1) | |
 
 **Where the hardware was left:**
@@ -35,11 +35,11 @@ A local git repository (2026-10-16); its history starts with the import from elb
 | [01 JTAG bring-up](docs/01-jtag-bringup.md) | rework, link, debug port, A55 base, halt, the APB-AP trap, resets |
 | [02 Linux without a console](docs/02-linux-without-a-console.md) | boot from RAM, shell over JTAG, dmesg and PC sampling from outside, UART map, the SM monitor |
 | [03 DSI and the I2C fault](docs/03-dsi-and-the-i2c-fault.md) | the probe chain, 17 checks, the correction, meter checks, workarounds |
-| [04 ARM trace into DRAM](docs/04-arm-trace-into-dram.md) | ETM/ETF/ETR from the debugger, 2 GB buffer, decode, four cross-checks |
+| [04 ARM trace into DRAM](docs/04-arm-trace-into-dram.md) | ETM/ETF/ETR from the debugger, 2 GB buffer, decode, four cross-checks; six cores; a real system; the live kernel text |
 | [05 i.MX95 vs T113-S3](docs/05-imx95-vs-t113.md) | what this debug path gives that the T113 can't; SDP vs FEL |
 | [06 Tools and rules](docs/06-tools-and-rules.md) | every script; a session start to finish; the rules |
 | [07 The CH347F, the M7, other probes](docs/07-ch347f-m7-and-other-probes.md) | link and speed benchmark; GPIO/UART/I2C/SPI of the chip; M7 over the same port, MCUXpresso; J-Link and TRACE32 compared |
-| [08 Trace visualisation](docs/08-trace-visualisation.md) | call-stack rebuild, Perfetto/speedscope/flame graph, time axis from timestamps and cycles, back-and-forth navigation, what TRACE32 adds |
+| [08 Trace visualisation](docs/08-trace-visualisation.md) | call-stack rebuild per core and per task, Perfetto/speedscope/flame graph, time axis from timestamps and cycles, back-and-forth navigation, what TRACE32 adds |
 | [`frmd-imx95-pro/`](frmd-imx95-pro/pictures/README.md) | UM12527, QSG, NXP design files, annotated pictures (the netlist, BOM and pictures used above) |
 
 Tags in all documents: `[V]` measured, `[?]` not verified, `[R]` from the design files or reference manual.

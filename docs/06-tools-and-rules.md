@@ -4,9 +4,9 @@
 
 | File | What it does |
 |---|---|
-| `ocd.sh STAGE` | one OpenOCD run per stage: `scan`, `dp`, `dm`, `dm-reset`, `dac`, `a55`, `server`, `mdm`, `pcs`, `etm-ids`, `trace CORE BASE SIZE MS`; `JTAG_KHZ=`, `SWD=1`, `DBG0=`; logs in `logs/` |
+| `ocd.sh STAGE` | one OpenOCD run per stage: `scan`, `dp`, `dm`, `dm-reset`, `dac`, `a55`, `server`, `mdm`, `pcs`, `etm-ids`, `trace CORE BASE SIZE MS`, `trace-all BASE SIZE MS [CONFIGR]`, `read BASE SIZE FILE` (SWD, 276 KiB/s), `ktext` (the live kernel text); `JTAG_KHZ=`, `SWD=1`, `DBG0=`; logs in `logs/` |
 | `imx95-pro.cfg` | the DAP, and with `IMX95_A55` the AHB-AP/APB-AP memory targets, six A55s (SMP, hwthread), the M7 and the M33; A55 debug base `0x80810000` |
-| `imx95-jtag.tcl` | IDCODEs, DP state, the debug mailbox (allow-listed commands only), MDM-AP, PC sampling, `etm_ids`, `cs_trace_start` / `cs_trace_stop` |
+| `imx95-jtag.tcl` | IDCODEs, DP state, the debug mailbox (allow-listed commands only), MDM-AP, PC sampling, `etm_ids`, `cs_trace_start` / `cs_trace_stop`, `cs_multi_start` / `cs_multi_stop` (all cores; the stop is at the sink) |
 | `console.sh start\|stop` | one long-running OpenOCD: RTT shell on `:9090`, Tcl RPC on `:6666` |
 | `jsh.py 'CMD'` | one command through the JTAG shell |
 | `ocdrpc.py 'TCL'` | the Tcl port; importable (`Ocd().read32()`, `.dump()`) |
@@ -17,8 +17,10 @@
 | `board/mkinitramfs.sh`, `board/init`, `board/jtagsh` | the JTAG initramfs |
 | `board/mkdtb.sh` | the session DTB; `TRACE=1`, `I2CGPIO=1` |
 | `board/physwin.c` | copy, read, write or checksum physical memory through `/dev/mem` (no-map regions only) |
+| `board/scenario-real.sh [done]` | real work for a trace on the board's own image (sha256sum over `/usr`, udevadm, journalctl, systemctl), a PID map and `/proc/interrupts` before and after |
 | `board/i2cbang.sh SDA SCL ADDR` | one I2C address probe clocked by hand through GPIO2, printing every pin state |
-| `trace/mksnap.py` | OpenCSD snapshot + decode + per-function instruction counts |
+| `trace/mksnap.py` | OpenCSD snapshot + decode + per-function instruction counts; `--cores`, `--kernel-live`, `--pids` |
+| `trace/tracetool.py` | index (per core, per task), Perfetto (protobuf or JSON), speedscope, folded stacks, `nav`; `--window` |
 | `frmd-imx95-pro/` | the board's documents: UM12527, the QSG, NXP's design files (schematic netlist, BOM, layout, Gerbers), the annotated pictures |
 
 External pieces, all in the elb1 repo:
@@ -60,6 +62,8 @@ SM_PORT=/dev/ttyACM3 smmon.py reset
 8. **The SM monitor's `mm` writes act at once and with full rights.** Read the register first, write, then restore and read back; log every write (this was done for every pad experiment in doc 03).
 9. **The CH347F on a hub port re-enumerates.** Prefer a PC port. A long-running OpenOCD can drift into stale reads: restart it before trusting odd values.
 10. **The full trace decode is about 300 MB of text per MB of trace.** `mksnap.py` keeps 2,000 lines and the summary.
+11. **Stop a multi-core trace at the sink** (`cs_multi_stop`): stopping the ETMs one by one takes ~1.8 ms each over the CH347F and gives every core a different end ([04](04-arm-trace-into-dram.md) §7.1).
+12. **Decode against the live kernel text** (`ocd.sh ktext`, `mksnap.py --kernel-live`), read again after a kernel rebuild. Linux patches 0.4 % of its text at boot; against `vmlinux` the call stacks drift ([04](04-arm-trace-into-dram.md) §8.1).
 
 ## Where things are (outside this directory)
 

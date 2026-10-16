@@ -15,6 +15,10 @@ the `board/mkdtb.sh` DTB: 2 GB no-map at `0x4_0000_0000`, 32 MB no-map at `0xf00
 - **Four independent checks agree with the decode.** The strongest: the trace counts 3,073
   instructions per 4 KB `clear_user`, and the loop in `vmlinux` executes 3,074.
 - **Linux can't drive the trace itself here:** enabling the ETF/ETR in the DT panics the boot (§2).
+- **All six cores trace into the one buffer and end at the same instant** (§7). On the board's
+  real system the trace names the process on every core (§8).
+- **Decode against the kernel text as it runs, read from DRAM:** Linux patches 0.4 % of its text
+  at boot, and decoding against `vmlinux` loses returns (§8.1).
 
 ## 1. The hardware `[R]` `[V]`
 
@@ -62,11 +66,11 @@ The kernel's own sequences (`etm4_enable_hw`, `__tmc_etr_enable_hw`, `tmc_flush_
    - TRCCONFIGR=0, events off, TRCSYNCPR=0xC, TRCTRACEIDR=0x10.
    - TRCVICTLR=0x201 (EVENT=always, start/stop logic started, **no exception level excluded**: Linux runs at EL2 under VHE here, so the kernel's default EL2 exclusion would hide the kernel).
    - TRCPRGCTLR=1.
-4. **Stop:**
-   - ETM off, wait idle.
-   - ETF FlushMan, then off.
-   - ETR FFCR |= FlushMan|StopOnFl, wait.
-   - Read STS, RWP, RRP. CTL=0.
+4. **Stop** (`cs_multi_stop`, also for one core):
+   - ETR FFCR |= FlushMan|StopOnFl, wait for TMCReady: every core's trace ends here (§7.1).
+   - Each ETM off, wait idle.
+   - ETF off.
+   - Read STS, RWP, RRP. ETR CTL=0.
 
 ```
 ./ocd.sh etm-ids 0                                   # TRCIDRs for the decoder
@@ -125,45 +129,136 @@ T3's start and end windows give the same profile to 0.01 %.
 
 ## 6. Limits and next steps
 
-- **Only core 0 has been traced.** Cores 1–5 have their ETMs at +n·0x100000. The ETF/ETR take all of them through the funnels, with a different TRCTRACEIDR each. `[?]`
+- **All six cores:** done (§7); a real system with process names: §8.
 - **Readout of a full 2 GB:**
   - Over JTAG it would take about 6 hours at 97 KiB/s.
   - Use the network, a USB stick or the eMMC instead (`dd if=/dev/mem` through `physwin r`).
   - Or trace less: address-range filters (TRCVIIECTLR + TRCACVRn) to a few functions, e.g. the DSI/ATTINY probe path.
-- **Timestamps and cycle counts:** TRCCONFIGR TS/CCI and the system counter as the time base (RM: no CoreSight TSG, the system counter is used). `[?]`
+- **Timestamps and cycle counts:** done ([08](08-trace-visualisation.md) §3).
 - **Linux's own driver:** find what fences the A55's view of `0x41030000` (TRDC / SM configuration), then `TRACE=1`. `[?]`
 - **When the trace is idle:** a core in WFI produces nothing (T1). Trace a workload, or switch the idle loop off with `cpuidle.off=1`, which only keeps the core powered, not busy.
 
-## 8. All six cores at once (2026-10-16 evening) `[V]`
+## 7. All six cores at once (2026-10-16 evening) `[V]`
 
-`cs_multi_start {0 1 2 3 4 5} BASE SIZE CONFIGR` (`imx95-jtag.tcl`) starts the sink once, then each core's ETM with trace ID 0x10 + core. The fixed funnels merge them into the one ETR buffer.
+`cs_multi_start {0 1 2 3 4 5} BASE SIZE CONFIGR` (`imx95-jtag.tcl`, or `ocd.sh trace-all`) starts the sink once, then each core's ETM with trace ID 0x10 + core. The fixed funnels merge them into the one ETR buffer.
 - All six ETMs answered with identical ID registers. The cores must be powered (`cpuidle.off=1`).
-- `mksnap.py --cores 0,1,2,3,4,5` writes one cpu/etm pair per core. `tracetool.py` keeps one call stack per trace ID and writes one Perfetto track per core.
+- `mksnap.py --cores 0,1,2,3,4,5` writes one cpu/etm pair per core. `tracetool.py` keeps the call stacks per trace ID and writes one Perfetto track per core.
 
-Capture T6: 8 MB, TS on (TRCCONFIGR 0x800), 300 ms, one job pinned per core:
+### 7.1 Stop the sink first, not the ETMs
+
+The first six-core capture (T6) stopped the ETMs one by one, then the sink. Each core's trace ended at a different time:
+
+| T6, ETMs stopped first | core 0 | core 1 | core 2 | core 3 | core 4 |
+|---|---|---|---|---|---|
+| trace ends at (ms from the oldest byte) | 3.888 | 5.747 | 7.656 | 9.596 | 11.548 |
+
+- **Why:** each `cs_etm_stop` (a write, then polling TRCSTATR) takes **1.74–1.86 ms** over the CH347F (measured). The cores still running kept filling the ring after the first had stopped, so in Perfetto the cores covered different intervals.
+- **Now `cs_multi_stop` stops the ETR first:** FFCR FlushMan|StopOnFl. The flush runs up through the ETF and funnels to every ETM, and the ETR stops writing when it completes. Then the ETMs, then the ETF.
+- **Checked before relying on it:** with the ETR stopped, the ETMs ran on for 40 s. RWP did not move, and every ETM still reached idle (TRCSTATR 0x3). A stopped ETR drops trace without stalling the ATB.
+- **T7 (same jobs, sink first):** every core's trace ends at **7.356 ms**, the same timestamp.
+- The start is still one core after another, milliseconds apart. A ring that has wrapped doesn't show it.
+
+### 7.2 Captures
+
+T7: 8 MB, TS on (TRCCONFIGR 0x800), 300 ms, one job pinned per core. Decoded against the live kernel text (§8.1):
 
 | Core | Job | Instructions in the buffer | What the decode shows | Overflows |
 |---|---|---|---|---|
-| 0 | `dd if=/dev/zero` | 8.4 M | `__arch_clear_user` | 0 |
-| 1 | `dd if=/dev/urandom` | 15.5 M | `chacha_permute`, `chacha_block_generic` | 0 |
-| 2 | `head -c ... /dev/zero \| md5sum` | 15.1 M | `md5_process_block64`, `getc`/`putchar` | **7** |
-| 3 | `head ... \| gzip -1` | 18.1 M | `deflate`, `fill_window`, `crc32` | **7** |
-| 4 | a shell loop | 16.7 M | `evaltree`, `evalcommand`, `argstr` (busybox ash) | 0 |
-| 5 | idle | 0.13 M | idle entry/exit; 5× TRACE_ON after WFI | 0 |
+| 0 | `dd if=/dev/zero` | 18.5 M | `__arch_clear_user` | 0 |
+| 1 | `dd if=/dev/urandom` | 22.1 M | `chacha_permute`, `chacha_block_generic` | 0 |
+| 2 | `head -c ... /dev/zero \| md5sum` | 15.6 M | `md5_process_block64`, `getc`/`putchar` | **24** |
+| 3 | `head ... \| gzip -1` | 14.7 M | `deflate`, `fill_window`, `crc32` | **22** |
+| 4 | a shell loop | 11.1 M | `evaltree`, `evalcommand`, `argstr` (busybox ash) | 0 |
+| 5 | idle | 0.09 M | idle entry and exit, around WFI | 0 |
 
-- **Every core's trace matches the job pinned to it.** In Perfetto (trace processor: 0 import errors), the busy cores' windows overlap at about 0.55–1.2 ms on the shared timestamps. The idle core's part of the buffer reaches 12 ms back, because it writes so little.
-- **Five busy cores are too much for the shared path:**
-  - The two with the densest user-space branching (cores 2 and 3) lost trace 7 times each (`NO_SYNC`/`TRACE_ON [overflow]`). The decoder resynchronises, and their call stacks start again after each gap.
+- **Every core's trace matches the job pinned to it,** over the same 7.36 ms. Perfetto's trace processor reports 0 import errors.
+- **T8, six busy cores** (core 5: `head | sha256sum`): all six end at 6.607 ms. 8 MB in 6.6 ms is 1.27 GB/s through the one ETR.
+- **The shared path can't carry that much:**
+  - The cores with the densest user-space branching lose trace. In T7, cores 2 and 3 overflow 24 and 22 times in 7.4 ms. In T8, cores 2, 3 and 5 overflow about 1,000 times each in 6.6 ms, while core 4 (the shell) has 0.
+  - The decoder resynchronises, and that core's call stack starts again after each gap.
   - **Fixes:**
     - fewer cores;
     - address filters;
     - **ETM stall** (TRCSTALLCTLR, supported here: TRCIDR3 bit 26). That makes a core wait instead of dropping trace, at the cost of its timing.
-- `tracetool.py index --count N` caps each core at N instructions (1 M here: 26 s, ~119 k slices).
+- These are synthetic loops. They look regular in Perfetto because they are: the same few calls a million times. §8 is a real system.
 
-## 7. Lessons
+## 8. A real system (T9, 2026-10-16) `[V]`
+
+**The workload is the board's own image** ("fast-boot eglfs": systemd, journald, udevd, networkd, dbus). `board/scenario-real.sh` runs its own tools, with nothing pinned:
+- `find /usr | xargs sha256sum` after dropping the page cache;
+- `journalctl -b`;
+- `udevadm trigger --action=change` + `settle`;
+- `systemctl daemon-reload`;
+- `logger` messages into journald.
+
+It also collects a PID → name map from `/proc/*/comm` every 0.2 s, and `/proc/interrupts` before and after.
+
+```
+board:  sh scenario-real.sh
+PC:     JTAG_KHZ=30000 ./ocd.sh trace-all 0xf1000000 0x1000000 1500 0x8880
+board:  sh scenario-real.sh done           # then copy /tmp/pidmap.txt to the PC
+PC:     ./ocd.sh read 0xf1000000 0x1000000 trace/etr-t9.bin
+        ./ocd.sh ktext                      # once per kernel build (§8.1)
+        trace/mksnap.py ... --configr 0x8880 --cores 0,1,2,3,4,5 --pids pidmap.txt --kernel-live trace/ktext-live-*.bin
+        trace/tracetool.py index ss-t9-real; trace/tracetool.py perfetto ss-t9-real
+```
+
+**The process on every core:**
+- TRCCONFIGR 0x8880 = TS + VMID + VMIDOPT. With VMIDOPT the VMID field carries CONTEXTIDR_EL2.
+- This kernel runs at EL2 (VHE) with `CONFIG_PID_IN_CONTEXTIDR=y`, so CONTEXTIDR_EL2 holds the running task's PID. This is Linux's `contextid2` option.
+- OpenCSD prints it as `PE_CONTEXT(... VMID=0x425)`. The PID changes inside `__switch_to`.
+
+**What the 16 MB holds, the last 50.7 ms** (`tracetool.py index`, time per task):
+
+| Core | Tasks | Notes |
+|---|---|---|
+| 0 | idle 99 %, `kworker/0:1H-mmc_complete` 1 %, `kworker/0:2-events` | all the eMMC interrupts (`sdhci_irq`, 56) and their completion work |
+| 1 | idle 100 %, `rcu_preempt` | asleep from 20 ms to the end |
+| 2 | idle 100 %, `rtt-console` | the kit's JTAG console polling |
+| 3 | `sha256sum` 98 %, idle 2 % | its own code between `read()` syscalls every ~80 µs; blocks on the eMMC at 13 and 39 ms |
+| 4 | `udevadm` 100 % | `openat`/`write` on sysfs `uevent` files, 31 M kernel instructions |
+| 5 | — | no trace at all: asleep for the whole 50.7 ms |
+
+**Checked against the board's own counters:**
+- `/proc/interrupts` has `mmc0` only on CPU0, and the trace has `sdhci_irq` only on core 0.
+- The trace has about 12 timer interrupts per core in 50.7 ms, which matches `CONFIG_HZ=250`.
+- Core 5 traced alone for 200 ms on the idle board wrote 0x20 bytes. Its ETM was programmed and powered (TRCPDSR.STICKYPD 0), and the core was just in WFI. With `CONFIG_NO_HZ_IDLE` an idle core takes no tick, so it writes nothing.
+
+### 8.1 Decode against the kernel as it runs
+
+- **Linux rewrites its own text at boot:** alternatives (LSE atomics instead of LL/SC loops), static keys, jump labels.
+  - The kernel text read from DRAM (`ocd.sh ktext`: physical 0x90400000, 18.9 MB, 69 s over SWD) differs from `vmlinux` in **19,805 words (0.42 %), in 7,018 functions**. Most are branches turned into NOPs.
+  - Two reads 25 minutes apart are identical.
+- **Decoded against `vmlinux`, the decoder follows branches that no longer exist.**
+  - At `_raw_read_lock` it took a conditional branch, and the next address in the trace was the caller, 14 MB away.
+  - Returns were lost in `_raw_read_lock`, `kmem_cache_alloc_noprof` and `percpu_counter_add_batch`, and call stacks grew to **597** deep.
+  - With `mksnap.py --kernel-live` the deepest stack is **25–47**, and 4 % more instructions decode.
+  - `perf` uses `/proc/kcore` for the same reason.
+- **`__arch_clear_user` has no patched word.** That is why T2's instruction count matched `vmlinux` exactly (§5). T6–T8 are now decoded against the live text too.
+
+### 8.2 What a real system adds to the decode (`tracetool.py`)
+
+| In the trace | What it means | How it is shown |
+|---|---|---|
+| `ADDR_NACC` at a user address (1.19 M in T9) | user programs are dynamically linked and loaded at random addresses (ASLR); there is no image to follow | one slice per stretch, `sha256sum [1056] (user code)`; the kernel nests under it at each syscall or interrupt |
+| `TRACE_ON [begin or filter]` | the ETM pauses while the core sleeps in WFI; **not** lost trace | `[WFI: core asleep]` under the idle loop; the call stack is kept |
+| a new VMID (PID) | a task switch | one call stack per task, saved and restored (one shared stack piled each task's frames onto the last); a per-core **tasks** track in Perfetto |
+| no trace after the idle task | asleep until the capture stopped | the idle slice runs to the capture's end |
+
+- **Time:** a sleep or a stretch of user code has no instructions to interpolate over. So the next timestamp gives that row the time between the two timestamps, minus what the counted kernel instructions need at 1.8 per ns (IPC 1 at 1.8 GHz).
+- **Not decoded yet:** the user programs' own functions. That needs each process's mappings (`/proc/PID/maps`) and its libraries as images, per PID.
+
+## 9. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known
    instruction count turns a plausible profile into a measured one.
 2. **The debugger sees what the OS can't:** the same ETF register aborts from the A55 and reads cleanly from the APB-AP.
 3. **A buffer far larger than the readout path is still useful.** Capture into GBs, then copy and
    decode the windows that matter.
+4. **Stop a shared trace at the sink.** Stopping the sources one at a time over a slow probe
+   gives each core a different end.
+5. **Decode against the memory as it is, not the file it came from.** Self-patching code
+   (alternatives, static keys) is invisible until the call stacks drift.
+6. **Trace a real system before drawing conclusions from a picture.** Pinned synthetic loops
+   look synthetic: idle cores, task switches, interrupts and user code without images are what a
+   real trace is made of.

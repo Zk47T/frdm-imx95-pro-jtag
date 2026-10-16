@@ -1,0 +1,3018 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1600" height="774" onload="init(evt)" viewBox="0 0 1600 774" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+		if (currentSearchTerm === null) return;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1600.0" height="774.0" fill="url(#background)"  />
+<text id="title" x="800.00" y="24" >i.MX95 running its own image: udevadm, sha256sum, kworkers, idle - by core and task (ETM, PID from CONTEXTIDR_EL2)</text>
+<text id="details" x="10.00" y="757" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1490.00" y="24" >Search</text>
+<text id="ignorecase" x="1574.00" y="24" >ic</text>
+<text id="matched" x="1490.00" y="757" > </text>
+<g id="frames">
+<g >
+<title>down_read (153,868 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1540.9" y="421" width="0.6" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1543.87" y="431.5" ></text>
+</g>
+<g >
+<title>down_read (137,020 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1552.9" y="421" width="0.5" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1555.87" y="431.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_map (31,969 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="53" width="0.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1334.83" y="63.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (36,394 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1326.1" y="453" width="0.1" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1329.06" y="463.5" ></text>
+</g>
+<g >
+<title>percpu_ref_get_many (225,500 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1527.1" y="437" width="0.9" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="1530.11" y="447.5" ></text>
+</g>
+<g >
+<title>dma_unmap_sg_attrs (239,035 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="322.9" y="597" width="1.0" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="325.89" y="607.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_map (36,826 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="69" width="0.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1334.81" y="79.5" ></text>
+</g>
+<g >
+<title>format_decode (25,280 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1573.6" y="309" width="0.1" height="15.0" fill="rgb(253,225,53)" rx="2" ry="2" />
+<text  x="1576.57" y="319.5" ></text>
+</g>
+<g >
+<title>core 3 (87,353,399 instructions (user code and WFI: time x 1.8/ns), 22.79%)</title><rect x="974.5" y="709" width="360.0" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="977.48" y="719.5" >core 3</text>
+</g>
+<g >
+<title>may_open (40,934 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1533.0" y="485" width="0.1" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="1535.98" y="495.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (40,976 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1491.0" y="469" width="0.1" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1493.98" y="479.5" ></text>
+</g>
+<g >
+<title>seq_open (71,995 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1558.3" y="437" width="0.3" height="15.0" fill="rgb(220,73,17)" rx="2" ry="2" />
+<text  x="1561.26" y="447.5" ></text>
+</g>
+<g >
+<title>read_pages (739,920 instructions (user code and WFI: time x 1.8/ns), 0.19%)</title><rect x="1330.6" y="389" width="3.1" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="1333.62" y="399.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_free_hook (78,775 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1482.0" y="437" width="0.3" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="1484.99" y="447.5" ></text>
+</g>
+<g >
+<title>call_on_irq_stack (114,378 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="321.0" y="549" width="0.4" height="15.0" fill="rgb(239,156,37)" rx="2" ry="2" />
+<text  x="323.96" y="559.5" ></text>
+</g>
+<g >
+<title>do_idle (75,688,812 instructions (user code and WFI: time x 1.8/ns), 19.74%)</title><rect x="10.0" y="661" width="311.9" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="13.00" y="671.5" >do_idle</text>
+</g>
+<g >
+<title>_raw_spin_lock (26,350 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1551.5" y="421" width="0.1" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1554.48" y="431.5" ></text>
+</g>
+<g >
+<title>__arm_smmu_tlb_inv_range (25,068 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.9" y="517" width="0.1" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="325.91" y="527.5" ></text>
+</g>
+<g >
+<title>irq_exit_rcu (44,732 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.5" y="565" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="324.54" y="575.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_getattr (841,920 instructions (user code and WFI: time x 1.8/ns), 0.22%)</title><rect x="1507.8" y="485" width="3.5" height="15.0" fill="rgb(245,188,45)" rx="2" ry="2" />
+<text  x="1510.84" y="495.5" ></text>
+</g>
+<g >
+<title>security_file_free (46,098 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.3" y="501" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="1495.33" y="511.5" ></text>
+</g>
+<g >
+<title>d_alloc_parallel (81,313 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1494.0" y="437" width="0.4" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="1497.03" y="447.5" ></text>
+</g>
+<g >
+<title>__arch_copy_to_user (204,048 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1501.3" y="501" width="0.9" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1504.34" y="511.5" ></text>
+</g>
+<g >
+<title>filemap_get_pages (1,113,787 instructions (user code and WFI: time x 1.8/ns), 0.29%)</title><rect x="1329.3" y="453" width="4.6" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
+<text  x="1332.28" y="463.5" ></text>
+</g>
+<g >
+<title>el0_svc (37,417 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="613" width="0.2" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="977.32" y="623.5" ></text>
+</g>
+<g >
+<title>filemap_readahead.isra.0 (63,714 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="437" width="0.3" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="1326.63" y="447.5" ></text>
+</g>
+<g >
+<title>udevadm [1061] (61,996,466 instructions (user code and WFI: time x 1.8/ns), 16.17%)</title><rect x="1334.5" y="693" width="255.5" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="1337.49" y="703.5" >udevadm [1061]</text>
+</g>
+<g >
+<title>__do_softirq (29,757 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.6" y="485" width="0.1" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="324.55" y="495.5" ></text>
+</g>
+<g >
+<title>kfree_link (25,200 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1583.3" y="501" width="0.1" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="1586.25" y="511.5" ></text>
+</g>
+<g >
+<title>touch_atime (40,612 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1582.0" y="517" width="0.2" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="1585.03" y="527.5" ></text>
+</g>
+<g >
+<title>cpu_startup_entry (1,973,200 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="677" width="8.1" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="977.48" y="687.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync (77,683 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="645" width="0.3" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1326.61" y="655.5" ></text>
+</g>
+<g >
+<title>mmc_mq_queue_rq (312,592 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1330.7" y="245" width="1.3" height="15.0" fill="rgb(227,104,24)" rx="2" ry="2" />
+<text  x="1333.72" y="255.5" ></text>
+</g>
+<g >
+<title>ext4_getattr (86,616 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1585.9" y="501" width="0.4" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="1588.91" y="511.5" ></text>
+</g>
+<g >
+<title>__dma_map_sg_attrs (228,530 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1331.0" y="165" width="1.0" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="1334.02" y="175.5" ></text>
+</g>
+<g >
+<title>copy_page_to_iter (745,949 instructions (user code and WFI: time x 1.8/ns), 0.19%)</title><rect x="1326.2" y="453" width="3.1" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1329.21" y="463.5" ></text>
+</g>
+<g >
+<title>vfs_getattr_nosec (1,320,076 instructions (user code and WFI: time x 1.8/ns), 0.34%)</title><rect x="1505.9" y="501" width="5.4" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="1508.90" y="511.5" ></text>
+</g>
+<g >
+<title>inode_permission (284,864 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1576.3" y="469" width="1.1" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1579.26" y="479.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (25,680 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.4" y="485" width="0.1" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1584.43" y="495.5" ></text>
+</g>
+<g >
+<title>step_into (170,229 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1555.4" y="485" width="0.7" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1558.44" y="495.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (227,592 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1506.7" y="485" width="0.9" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1509.71" y="495.5" ></text>
+</g>
+<g >
+<title>__lookup_slow (289,392 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1579.8" y="469" width="1.2" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="1582.81" y="479.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_read (2,328,041 instructions (user code and WFI: time x 1.8/ns), 0.61%)</title><rect x="1324.8" y="549" width="9.6" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1327.77" y="559.5" ></text>
+</g>
+<g >
+<title>platform_uevent (211,345 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1573.1" y="389" width="0.9" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="1576.14" y="399.5" ></text>
+</g>
+<g >
+<title>device_node_string (274,219 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1571.8" y="325" width="1.1" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="1574.80" y="335.5" ></text>
+</g>
+<g >
+<title>map_id_range_up (35,288 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1585.3" y="485" width="0.1" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1588.28" y="495.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (243,288 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1502.2" y="501" width="1.0" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1505.18" y="511.5" ></text>
+</g>
+<g >
+<title>kernfs_fop_release (238,025 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1481.4" y="501" width="0.9" height="15.0" fill="rgb(233,130,31)" rx="2" ry="2" />
+<text  x="1484.36" y="511.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (90,342 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1580.5" y="389" width="0.4" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1583.53" y="399.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (25,680 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1495.5" y="485" width="0.1" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1498.46" y="495.5" ></text>
+</g>
+<g >
+<title>__blk_mq_sched_dispatch_requests (63,498 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="277" width="0.3" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="1326.63" y="287.5" ></text>
+</g>
+<g >
+<title>dput (228,206 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1529.9" y="485" width="0.9" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1532.87" y="495.5" ></text>
+</g>
+<g >
+<title>__iommu_dma_unmap (91,297 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="322.9" y="565" width="0.4" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="325.90" y="575.5" ></text>
+</g>
+<g >
+<title>__do_sys_fstatfs (538,239 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1495.8" y="533" width="2.2" height="15.0" fill="rgb(249,204,48)" rx="2" ry="2" />
+<text  x="1498.78" y="543.5" ></text>
+</g>
+<g >
+<title>alloc_buffer_head (66,241 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1332.5" y="277" width="0.3" height="15.0" fill="rgb(215,46,11)" rx="2" ry="2" />
+<text  x="1335.51" y="287.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_unmap (44,193 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="453" width="0.2" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="326.09" y="463.5" ></text>
+</g>
+<g >
+<title>_raw_spin_unlock (46,125 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1562.3" y="485" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1565.28" y="495.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_get_link (236,003 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1582.3" y="501" width="1.0" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="1585.28" y="511.5" ></text>
+</g>
+<g >
+<title>vfs_fstat (1,520,200 instructions (user code and WFI: time x 1.8/ns), 0.40%)</title><rect x="1505.1" y="517" width="6.2" height="15.0" fill="rgb(208,16,4)" rx="2" ry="2" />
+<text  x="1508.08" y="527.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (24,810 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1545.8" y="453" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1548.80" y="463.5" ></text>
+</g>
+<g >
+<title>up_read (84,552 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1511.0" y="469" width="0.3" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="1513.96" y="479.5" ></text>
+</g>
+<g >
+<title>do_readlinkat (1,931,395 instructions (user code and WFI: time x 1.8/ns), 0.50%)</title><rect x="1575.5" y="533" width="8.0" height="15.0" fill="rgb(221,76,18)" rx="2" ry="2" />
+<text  x="1578.51" y="543.5" ></text>
+</g>
+<g >
+<title>__update_cpu_freelist_fast (164,000 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1565.1" y="469" width="0.6" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1568.07" y="479.5" ></text>
+</g>
+<g >
+<title>nd_jump_root (102,528 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1546.1" y="453" width="0.5" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1549.14" y="463.5" ></text>
+</g>
+<g >
+<title>vectors (2,562,398 instructions (user code and WFI: time x 1.8/ns), 0.67%)</title><rect x="1323.9" y="661" width="10.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1326.93" y="671.5" ></text>
+</g>
+<g >
+<title>blk_mq_submit_bio (32,767 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.5" y="277" width="0.2" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1336.52" y="287.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (46,240 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1570.6" y="389" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1573.63" y="399.5" ></text>
+</g>
+<g >
+<title>putname (630,252 instructions (user code and WFI: time x 1.8/ns), 0.16%)</title><rect x="1566.7" y="517" width="2.6" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1569.73" y="527.5" ></text>
+</g>
+<g >
+<title>walk_component (349,722 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1494.0" y="469" width="1.4" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1496.98" y="479.5" ></text>
+</g>
+<g >
+<title>alloc_frozen_pages_noprof (25,487 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.5" y="357" width="0.1" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1333.52" y="367.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (43,659 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1494.1" y="389" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1497.14" y="399.5" ></text>
+</g>
+<g >
+<title>mod_memcg_state (27,195 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1526.7" y="421" width="0.1" height="15.0" fill="rgb(232,127,30)" rx="2" ry="2" />
+<text  x="1529.69" y="431.5" ></text>
+</g>
+<g >
+<title>iommu_dma_map_sg (228,104 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1331.0" y="149" width="1.0" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="1334.03" y="159.5" ></text>
+</g>
+<g >
+<title>alloc_empty_file (2,755,400 instructions (user code and WFI: time x 1.8/ns), 0.72%)</title><rect x="1518.5" y="485" width="11.3" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1521.48" y="495.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq_handler (74,153 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="973.7" y="597" width="0.3" height="15.0" fill="rgb(213,36,8)" rx="2" ry="2" />
+<text  x="976.72" y="607.5" ></text>
+</g>
+<g >
+<title>__fsnotify_parent (51,128 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1325.3" y="501" width="0.3" height="15.0" fill="rgb(225,96,23)" rx="2" ry="2" />
+<text  x="1328.34" y="511.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (34,063 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1332.6" y="245" width="0.1" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1335.58" y="255.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_getdents64 (56,343 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1498.0" y="549" width="0.2" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="1501.00" y="559.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_faccessat2 (766,762 instructions (user code and WFI: time x 1.8/ns), 0.20%)</title><rect x="1492.6" y="549" width="3.1" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="1495.57" y="559.5" ></text>
+</g>
+<g >
+<title>rwsem_read_trylock (53,262 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1541.3" y="405" width="0.2" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1544.29" y="415.5" ></text>
+</g>
+<g >
+<title>path_openat (10,312,334 instructions (user code and WFI: time x 1.8/ns), 2.69%)</title><rect x="1517.2" y="501" width="42.5" height="15.0" fill="rgb(249,202,48)" rx="2" ry="2" />
+<text  x="1520.18" y="511.5" >path..</text>
+</g>
+<g >
+<title>do_statfs_native (154,401 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1496.2" y="517" width="0.7" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1499.22" y="527.5" ></text>
+</g>
+<g >
+<title>folio_create_buffers (70,708 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1332.5" y="325" width="0.3" height="15.0" fill="rgb(221,77,18)" rx="2" ry="2" />
+<text  x="1335.50" y="335.5" ></text>
+</g>
+<g >
+<title>d_splice_alias (46,951 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1548.5" y="421" width="0.2" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="1551.47" y="431.5" ></text>
+</g>
+<g >
+<title>init_file (353,625 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1519.3" y="469" width="1.5" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1522.33" y="479.5" ></text>
+</g>
+<g >
+<title>refill_obj_stock (43,250 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1481.7" y="437" width="0.2" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1484.73" y="447.5" ></text>
+</g>
+<g >
+<title>arm_smmu_tlb_inv_range_domain (30,819 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.9" y="533" width="0.1" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="325.91" y="543.5" ></text>
+</g>
+<g >
+<title>blk_mq_submit_bio (67,296 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.2" y="245" width="0.2" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1336.16" y="255.5" ></text>
+</g>
+<g >
+<title>rwsem_read_trylock (47,430 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1553.2" y="405" width="0.2" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1556.24" y="415.5" ></text>
+</g>
+<g >
+<title>vscnprintf (298,134 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1574.2" y="389" width="1.2" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="1577.18" y="399.5" ></text>
+</g>
+<g >
+<title>up_read (28,704 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1577.3" y="437" width="0.1" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="1580.29" y="447.5" ></text>
+</g>
+<g >
+<title>dput (37,440 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.9" y="501" width="0.1" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1495.86" y="511.5" ></text>
+</g>
+<g >
+<title>fwnode_get_name (26,840 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1572.1" y="293" width="0.1" height="15.0" fill="rgb(221,76,18)" rx="2" ry="2" />
+<text  x="1575.09" y="303.5" ></text>
+</g>
+<g >
+<title>arch_cpu_idle (144,279 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="321.9" y="645" width="0.6" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="324.95" y="655.5" ></text>
+</g>
+<g >
+<title>__lookup_slow (259,301 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1494.0" y="453" width="1.1" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="1497.01" y="463.5" ></text>
+</g>
+<g >
+<title>end_bio_bh_io_sync (39,454 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1323.7" y="149" width="0.1" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1326.66" y="159.5" ></text>
+</g>
+<g >
+<title>kvfree (99,255 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1481.9" y="469" width="0.4" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1484.93" y="479.5" ></text>
+</g>
+<g >
+<title>terminate_walk (43,032 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1556.1" y="485" width="0.2" height="15.0" fill="rgb(206,4,1)" rx="2" ry="2" />
+<text  x="1559.14" y="495.5" ></text>
+</g>
+<g >
+<title>seq_read_iter (1,453,052 instructions (user code and WFI: time x 1.8/ns), 0.38%)</title><rect x="1569.5" y="485" width="6.0" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="1572.48" y="495.5" ></text>
+</g>
+<g >
+<title>folio_alloc_noprof (26,044 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.5" y="373" width="0.1" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="1333.52" y="383.5" ></text>
+</g>
+<g >
+<title>fdget_raw (66,708 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1505.5" y="501" width="0.3" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1508.51" y="511.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (1,335,775 instructions (user code and WFI: time x 1.8/ns), 0.35%)</title><rect x="1522.6" y="453" width="5.5" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1525.56" y="463.5" ></text>
+</g>
+<g >
+<title>handle_irq_desc (104,304 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="321.0" y="501" width="0.4" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="324.01" y="511.5" ></text>
+</g>
+<g >
+<title>____do_softirq (29,820 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.6" y="501" width="0.1" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="324.55" y="511.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (232,930 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1498.9" y="517" width="1.0" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1501.91" y="527.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (39,515 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1558.3" y="405" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1561.35" y="415.5" ></text>
+</g>
+<g >
+<title>map_id_range_up (172,656 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1503.4" y="485" width="0.7" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1506.39" y="495.5" ></text>
+</g>
+<g >
+<title>cp_statx (317,592 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1584.1" y="517" width="1.3" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="1587.12" y="527.5" ></text>
+</g>
+<g >
+<title>arch_cpu_idle (75,433,054 instructions (user code and WFI: time x 1.8/ns), 19.68%)</title><rect x="10.0" y="629" width="310.9" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="13.02" y="639.5" >arch_cpu_idle</text>
+</g>
+<g >
+<title>vfs_getattr_nosec (183,658 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1585.5" y="517" width="0.8" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="1588.51" y="527.5" ></text>
+</g>
+<g >
+<title>default_idle_call (75,633,916 instructions (user code and WFI: time x 1.8/ns), 19.73%)</title><rect x="10.0" y="645" width="311.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.02" y="655.5" >default_idle_call</text>
+</g>
+<g >
+<title>of_device_uevent (503,691 instructions (user code and WFI: time x 1.8/ns), 0.13%)</title><rect x="1571.1" y="389" width="2.0" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1574.07" y="399.5" ></text>
+</g>
+<g >
+<title>sdhci_pre_req (229,973 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1331.0" y="213" width="1.0" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1334.02" y="223.5" ></text>
+</g>
+<g >
+<title>down_read (183,196 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1508.5" y="469" width="0.8" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1511.54" y="479.5" ></text>
+</g>
+<g >
+<title>of_fwnode_get_parent (28,691 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1571.9" y="277" width="0.1" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="1574.93" y="287.5" ></text>
+</g>
+<g >
+<title>sched_tick (38,752 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1324.0" y="405" width="0.2" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1327.00" y="415.5" ></text>
+</g>
+<g >
+<title>arch_timer_handler_phys (61,497 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="485" width="0.3" height="15.0" fill="rgb(216,50,12)" rx="2" ry="2" />
+<text  x="1326.95" y="495.5" ></text>
+</g>
+<g >
+<title>kernfs_get_inode (153,222 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1580.4" y="437" width="0.6" height="15.0" fill="rgb(222,79,18)" rx="2" ry="2" />
+<text  x="1583.37" y="447.5" ></text>
+</g>
+<g >
+<title>blk_update_request (50,850 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1323.6" y="181" width="0.2" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1326.64" y="191.5" ></text>
+</g>
+<g >
+<title>default_idle_call (1,968,163 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="645" width="8.1" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="977.48" y="655.5" ></text>
+</g>
+<g >
+<title>page_cache_async_ra (63,702 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="421" width="0.3" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="1326.63" y="431.5" ></text>
+</g>
+<g >
+<title>iommu_dma_unmap_sg (238,738 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="322.9" y="581" width="1.0" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
+<text  x="325.89" y="591.5" ></text>
+</g>
+<g >
+<title>schedule (42,499 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.9" y="661" width="0.2" height="15.0" fill="rgb(254,229,54)" rx="2" ry="2" />
+<text  x="326.88" y="671.5" ></text>
+</g>
+<g >
+<title>vectors (136,528 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1589.4" y="645" width="0.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1592.44" y="655.5" ></text>
+</g>
+<g >
+<title>core 0 (76,206,701 instructions (user code and WFI: time x 1.8/ns), 19.88%)</title><rect x="10.0" y="709" width="314.1" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="13.00" y="719.5" >core 0</text>
+</g>
+<g >
+<title>_copy_to_iter (710,505 instructions (user code and WFI: time x 1.8/ns), 0.19%)</title><rect x="1326.4" y="437" width="2.9" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1329.35" y="447.5" ></text>
+</g>
+<g >
+<title>do_idle (79,973,489 instructions (user code and WFI: time x 1.8/ns), 20.86%)</title><rect x="324.1" y="661" width="329.6" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="327.07" y="671.5" >do_idle</text>
+</g>
+<g >
+<title>__rcu_read_unlock (39,688 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1534.4" y="453" width="0.2" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1537.41" y="463.5" ></text>
+</g>
+<g >
+<title>__arch_copy_to_user (81,804 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1584.5" y="501" width="0.3" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1587.47" y="511.5" ></text>
+</g>
+<g >
+<title>lockref_put_return (44,768 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1555.2" y="421" width="0.2" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1558.21" y="431.5" ></text>
+</g>
+<g >
+<title>iget_locked (131,062 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1580.4" y="421" width="0.5" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1583.38" y="431.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_post_req (308,686 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="322.6" y="629" width="1.3" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="325.60" y="639.5" ></text>
+</g>
+<g >
+<title>of_get_parent (36,652 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1572.3" y="261" width="0.2" height="15.0" fill="rgb(244,179,43)" rx="2" ry="2" />
+<text  x="1575.33" y="271.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_unmap (42,384 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="437" width="0.2" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="326.10" y="447.5" ></text>
+</g>
+<g >
+<title>el0_interrupt (74,140 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="597" width="0.3" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1326.94" y="607.5" ></text>
+</g>
+<g >
+<title>build_open_flags (277,728 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1513.3" y="517" width="1.2" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
+<text  x="1516.31" y="527.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (47,920 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1494.8" y="357" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1497.77" y="367.5" ></text>
+</g>
+<g >
+<title>ext4_file_read_iter (2,114,692 instructions (user code and WFI: time x 1.8/ns), 0.55%)</title><rect x="1325.6" y="501" width="8.7" height="15.0" fill="rgb(244,180,43)" rx="2" ry="2" />
+<text  x="1328.56" y="511.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync (2,455,291 instructions (user code and WFI: time x 1.8/ns), 0.64%)</title><rect x="1324.2" y="645" width="10.2" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1327.24" y="655.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync_handler (2,406,242 instructions (user code and WFI: time x 1.8/ns), 0.63%)</title><rect x="1324.4" y="629" width="10.0" height="15.0" fill="rgb(211,32,7)" rx="2" ry="2" />
+<text  x="1327.44" y="639.5" ></text>
+</g>
+<g >
+<title>__fput (3,412,060 instructions (user code and WFI: time x 1.8/ns), 0.89%)</title><rect x="1478.5" y="517" width="14.1" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1481.50" y="527.5" ></text>
+</g>
+<g >
+<title>ksys_read (76,978 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="533" width="0.3" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="1326.61" y="543.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_issue_rq (63,331 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="229" width="0.3" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="1326.63" y="239.5" ></text>
+</g>
+<g >
+<title>page_cache_sync_ra (39,635 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.7" y="437" width="0.2" height="15.0" fill="rgb(236,146,35)" rx="2" ry="2" />
+<text  x="1336.71" y="447.5" ></text>
+</g>
+<g >
+<title>statfs_by_dentry (160,173 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1497.1" y="501" width="0.7" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="1500.12" y="511.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq (190,974 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="320.9" y="613" width="0.8" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="323.94" y="623.5" ></text>
+</g>
+<g >
+<title>percpu_counter_add_batch (266,500 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1528.7" y="469" width="1.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1531.74" y="479.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_permission (28,715 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1533.0" y="453" width="0.1" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1536.02" y="463.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (40,976 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1480.7" y="485" width="0.1" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1483.67" y="495.5" ></text>
+</g>
+<g >
+<title>el0t_64_irq (75,328 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="645" width="0.3" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="1326.93" y="655.5" ></text>
+</g>
+<g >
+<title>arch_cpu_idle (1,959,319 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="629" width="8.1" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="977.48" y="639.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_free_hook (59,410 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1481.7" y="453" width="0.2" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="1484.66" y="463.5" ></text>
+</g>
+<g >
+<title>dma_map_sg_attrs (228,742 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1331.0" y="181" width="1.0" height="15.0" fill="rgb(228,108,25)" rx="2" ry="2" />
+<text  x="1334.02" y="191.5" ></text>
+</g>
+<g >
+<title>__d_alloc (64,890 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1579.9" y="437" width="0.2" height="15.0" fill="rgb(247,197,47)" rx="2" ry="2" />
+<text  x="1582.88" y="447.5" ></text>
+</g>
+<g >
+<title>call_on_irq_stack (42,266 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="549" width="0.2" height="15.0" fill="rgb(239,156,37)" rx="2" ry="2" />
+<text  x="976.72" y="559.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_map (27,176 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="37" width="0.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1334.85" y="47.5" ></text>
+</g>
+<g >
+<title>d_splice_alias_ops (45,647 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1548.5" y="405" width="0.2" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
+<text  x="1551.48" y="415.5" ></text>
+</g>
+<g >
+<title>submit_bio_noacct (89,171 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.1" y="293" width="0.3" height="15.0" fill="rgb(211,30,7)" rx="2" ry="2" />
+<text  x="1336.08" y="303.5" ></text>
+</g>
+<g >
+<title>d_lru_add (25,360 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.7" y="485" width="0.1" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
+<text  x="1584.72" y="495.5" ></text>
+</g>
+<g >
+<title>filename_lookup (1,407,803 instructions (user code and WFI: time x 1.8/ns), 0.37%)</title><rect x="1575.6" y="517" width="5.8" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1578.58" y="527.5" ></text>
+</g>
+<g >
+<title>filemap_add_folio (98,322 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1330.1" y="389" width="0.4" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1333.11" y="399.5" ></text>
+</g>
+<g >
+<title>iommu_dma_sync_sg_for_device (151,732 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1331.1" y="133" width="0.7" height="15.0" fill="rgb(232,127,30)" rx="2" ry="2" />
+<text  x="1334.13" y="143.5" ></text>
+</g>
+<g >
+<title>walk_component (292,965 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1531.4" y="469" width="1.2" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1534.35" y="479.5" ></text>
+</g>
+<g >
+<title>generic_file_read_iter (76,468 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="485" width="0.3" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1326.61" y="495.5" ></text>
+</g>
+<g >
+<title>__hrtimer_run_queues (31,111 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="437" width="0.2" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="976.75" y="447.5" ></text>
+</g>
+<g >
+<title>do_el0_svc (2,377,347 instructions (user code and WFI: time x 1.8/ns), 0.62%)</title><rect x="1324.6" y="597" width="9.8" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="1327.56" y="607.5" ></text>
+</g>
+<g >
+<title>generic_handle_domain_irq (111,549 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="321.0" y="517" width="0.4" height="15.0" fill="rgb(254,229,54)" rx="2" ry="2" />
+<text  x="323.98" y="527.5" ></text>
+</g>
+<g >
+<title>sdhci_irq (62,941 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="321.1" y="437" width="0.2" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="324.05" y="447.5" ></text>
+</g>
+<g >
+<title>ext4_mpage_readpages (381,739 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1332.1" y="357" width="1.6" height="15.0" fill="rgb(228,110,26)" rx="2" ry="2" />
+<text  x="1335.10" y="367.5" ></text>
+</g>
+<g >
+<title>pid_revalidate (40,612 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1531.7" y="437" width="0.2" height="15.0" fill="rgb(223,87,20)" rx="2" ry="2" />
+<text  x="1534.71" y="447.5" ></text>
+</g>
+<g >
+<title>handle_irq_desc (39,492 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="501" width="0.2" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="976.74" y="511.5" ></text>
+</g>
+<g >
+<title>__do_sys_newfstat (3,146,150 instructions (user code and WFI: time x 1.8/ns), 0.82%)</title><rect x="1498.4" y="533" width="12.9" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="1501.38" y="543.5" ></text>
+</g>
+<g >
+<title>file_close_fd (408,832 instructions (user code and WFI: time x 1.8/ns), 0.11%)</title><rect x="1475.9" y="533" width="1.7" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="1478.88" y="543.5" ></text>
+</g>
+<g >
+<title>__account_obj_stock (153,977 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1487.5" y="453" width="0.7" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1490.54" y="463.5" ></text>
+</g>
+<g >
+<title>__kvmalloc_node_noprof (157,176 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1569.6" y="469" width="0.6" height="15.0" fill="rgb(233,129,30)" rx="2" ry="2" />
+<text  x="1572.56" y="479.5" ></text>
+</g>
+<g >
+<title>do_softirq_own_stack (30,072 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.6" y="533" width="0.1" height="15.0" fill="rgb(250,209,50)" rx="2" ry="2" />
+<text  x="324.55" y="543.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (131,576 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1569.6" y="453" width="0.6" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1572.64" y="463.5" ></text>
+</g>
+<g >
+<title>mod_memcg_state (27,195 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1488.3" y="437" width="0.1" height="15.0" fill="rgb(232,127,30)" rx="2" ry="2" />
+<text  x="1491.29" y="447.5" ></text>
+</g>
+<g >
+<title>kmem_cache_free (517,524 instructions (user code and WFI: time x 1.8/ns), 0.13%)</title><rect x="1567.2" y="501" width="2.1" height="15.0" fill="rgb(254,225,53)" rx="2" ry="2" />
+<text  x="1570.20" y="511.5" ></text>
+</g>
+<g >
+<title>default_idle_call (147,590 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="321.9" y="661" width="0.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="324.95" y="671.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_permission (224,140 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1576.5" y="453" width="0.9" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1579.48" y="463.5" ></text>
+</g>
+<g >
+<title>vsnprintf (54,560 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1532.3" y="405" width="0.3" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1535.33" y="415.5" ></text>
+</g>
+<g >
+<title>mntget (128,100 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1559.2" y="437" width="0.5" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="1562.15" y="447.5" ></text>
+</g>
+<g >
+<title>idle [0] (77,752,046 instructions (user code and WFI: time x 1.8/ns), 20.28%)</title><rect x="653.7" y="693" width="320.5" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="656.75" y="703.5" >idle [0]</text>
+</g>
+<g >
+<title>blk_attempt_bio_merge.part.0 (26,594 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.3" y="213" width="0.1" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="1336.26" y="223.5" ></text>
+</g>
+<g >
+<title>arch_sync_dma_for_cpu (143,558 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="323.3" y="549" width="0.6" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="326.28" y="559.5" ></text>
+</g>
+<g >
+<title>__d_alloc (66,357 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1494.1" y="421" width="0.2" height="15.0" fill="rgb(247,197,47)" rx="2" ry="2" />
+<text  x="1497.08" y="431.5" ></text>
+</g>
+<g >
+<title>dput (128,708 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1554.9" y="437" width="0.5" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1557.87" y="447.5" ></text>
+</g>
+<g >
+<title>filemap_get_pages (64,649 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="453" width="0.3" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
+<text  x="1326.63" y="463.5" ></text>
+</g>
+<g >
+<title>ext4_map_blocks (45,776 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1332.3" y="293" width="0.2" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="1335.30" y="303.5" ></text>
+</g>
+<g >
+<title>terminate_walk (26,640 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1579.7" y="485" width="0.1" height="15.0" fill="rgb(206,4,1)" rx="2" ry="2" />
+<text  x="1582.67" y="495.5" ></text>
+</g>
+<g >
+<title>legitimize_links (56,221 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1544.2" y="437" width="0.2" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="1547.16" y="447.5" ></text>
+</g>
+<g >
+<title>el1_interrupt (24,385 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="653.5" y="581" width="0.1" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="656.55" y="591.5" ></text>
+</g>
+<g >
+<title>lockref_get_not_dead (32,048 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1536.9" y="421" width="0.2" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1539.94" y="431.5" ></text>
+</g>
+<g >
+<title>queue_work_on (34,330 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="389" width="0.1" height="15.0" fill="rgb(248,200,48)" rx="2" ry="2" />
+<text  x="324.17" y="399.5" ></text>
+</g>
+<g >
+<title>seq_release (178,825 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1481.6" y="485" width="0.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1484.60" y="495.5" ></text>
+</g>
+<g >
+<title>ext4_getattr (46,516 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1507.6" y="485" width="0.2" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="1510.65" y="495.5" ></text>
+</g>
+<g >
+<title>[WFI: core asleep] (1,959,289 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="613" width="8.1" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="977.48" y="623.5" ></text>
+</g>
+<g >
+<title>__account_obj_stock (148,941 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1526.1" y="421" width="0.6" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1529.07" y="431.5" ></text>
+</g>
+<g >
+<title>arm_smmu_iotlb_sync (31,197 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.9" y="549" width="0.1" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="325.91" y="559.5" ></text>
+</g>
+<g >
+<title>__arch_copy_to_user (83,694 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1496.5" y="501" width="0.4" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1499.51" y="511.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_issue_rq (296,779 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1330.7" y="229" width="1.3" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="1333.74" y="239.5" ></text>
+</g>
+<g >
+<title>kick_pool (28,376 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="357" width="0.1" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="324.19" y="367.5" ></text>
+</g>
+<g >
+<title>current_time (46,640 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1334.0" y="421" width="0.2" height="15.0" fill="rgb(235,138,33)" rx="2" ry="2" />
+<text  x="1337.05" y="431.5" ></text>
+</g>
+<g >
+<title>__blk_flush_plug (63,636 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="357" width="0.3" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="1326.63" y="367.5" ></text>
+</g>
+<g >
+<title>__update_cpu_freelist_fast (163,968 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1568.7" y="485" width="0.6" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1571.65" y="495.5" ></text>
+</g>
+<g >
+<title>blk_finish_plug (63,641 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="373" width="0.3" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="1326.63" y="383.5" ></text>
+</g>
+<g >
+<title>path_init (27,280 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1579.6" y="485" width="0.1" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="1582.56" y="495.5" ></text>
+</g>
+<g >
+<title>ext4_get_block (56,563 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1332.3" y="325" width="0.2" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="1335.27" y="335.5" ></text>
+</g>
+<g >
+<title>d_same_name (73,786 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1551.7" y="421" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1554.68" y="431.5" ></text>
+</g>
+<g >
+<title>[WFI: core asleep] (77,633,712 instructions (user code and WFI: time x 1.8/ns), 20.25%)</title><rect x="653.8" y="613" width="319.9" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="656.75" y="623.5" >[WFI: core asleep]</text>
+</g>
+<g >
+<title>hrtimer_interrupt (61,317 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="469" width="0.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1326.95" y="479.5" ></text>
+</g>
+<g >
+<title>read_pages (63,657 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="389" width="0.3" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="1326.63" y="399.5" ></text>
+</g>
+<g >
+<title>bio_alloc_bioset (46,475 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1332.8" y="309" width="0.2" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1335.85" y="319.5" ></text>
+</g>
+<g >
+<title>__mmc_start_request (31,539 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.9" y="197" width="0.1" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1333.88" y="207.5" ></text>
+</g>
+<g >
+<title>gic_handle_irq (113,136 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="321.0" y="533" width="0.4" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="323.97" y="543.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq_handler (189,042 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="320.9" y="597" width="0.8" height="15.0" fill="rgb(213,36,8)" rx="2" ry="2" />
+<text  x="323.95" y="607.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_free_hook (1,086,533 instructions (user code and WFI: time x 1.8/ns), 0.28%)</title><rect x="1484.0" y="485" width="4.5" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="1487.01" y="495.5" ></text>
+</g>
+<g >
+<title>kernfs_seq_show (1,249,494 instructions (user code and WFI: time x 1.8/ns), 0.33%)</title><rect x="1570.3" y="469" width="5.1" height="15.0" fill="rgb(217,59,14)" rx="2" ry="2" />
+<text  x="1573.26" y="479.5" ></text>
+</g>
+<g >
+<title>__slab_alloc.isra.0 (32,504 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1549.7" y="357" width="0.1" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1552.67" y="367.5" ></text>
+</g>
+<g >
+<title>down_read (49,712 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1578.7" y="421" width="0.2" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1581.66" y="431.5" ></text>
+</g>
+<g >
+<title>__legitimize_mnt (112,442 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1543.4" y="421" width="0.5" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1546.40" y="431.5" ></text>
+</g>
+<g >
+<title>iommu_unmap_fast (51,807 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="549" width="0.2" height="15.0" fill="rgb(228,107,25)" rx="2" ry="2" />
+<text  x="326.06" y="559.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (24,805 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1534.3" y="453" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1537.31" y="463.5" ></text>
+</g>
+<g >
+<title>new_slab (30,600 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1580.8" y="341" width="0.1" height="15.0" fill="rgb(217,59,14)" rx="2" ry="2" />
+<text  x="1583.76" y="351.5" ></text>
+</g>
+<g >
+<title>security_inode_getattr (27,468 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1505.8" y="501" width="0.1" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
+<text  x="1508.79" y="511.5" ></text>
+</g>
+<g >
+<title>step_into (166,402 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1531.9" y="453" width="0.7" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1534.88" y="463.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_close (4,151,943 instructions (user code and WFI: time x 1.8/ns), 1.08%)</title><rect x="1475.5" y="549" width="17.1" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1478.45" y="559.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (25,625 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1527.8" y="421" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1530.77" y="431.5" ></text>
+</g>
+<g >
+<title>handle_irq_desc (62,445 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="517" width="0.3" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="1326.95" y="527.5" ></text>
+</g>
+<g >
+<title>handle_dots (55,530 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1550.1" y="453" width="0.2" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="1553.08" y="463.5" ></text>
+</g>
+<g >
+<title>kernfs_refresh_inode (130,196 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1541.7" y="421" width="0.6" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="1544.72" y="431.5" ></text>
+</g>
+<g >
+<title>lookup_fast (58,720 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1581.0" y="469" width="0.3" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1584.02" y="479.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_lookup (205,942 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1580.2" y="453" width="0.8" height="15.0" fill="rgb(222,80,19)" rx="2" ry="2" />
+<text  x="1583.16" y="463.5" ></text>
+</g>
+<g >
+<title>[WFI: core asleep] (75,432,370 instructions (user code and WFI: time x 1.8/ns), 19.68%)</title><rect x="10.0" y="613" width="310.9" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="13.03" y="623.5" >[WFI: core asleep]</text>
+</g>
+<g >
+<title>percpu_counter_add_batch (266,344 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1491.2" y="501" width="1.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1494.24" y="511.5" ></text>
+</g>
+<g >
+<title>___slab_alloc (32,354 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1549.7" y="341" width="0.1" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="1552.67" y="351.5" ></text>
+</g>
+<g >
+<title>vfs_read (2,276,469 instructions (user code and WFI: time x 1.8/ns), 0.59%)</title><rect x="1325.0" y="517" width="9.4" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1327.98" y="527.5" ></text>
+</g>
+<g >
+<title>lookup_fast (92,025 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1531.5" y="453" width="0.4" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1534.50" y="463.5" ></text>
+</g>
+<g >
+<title>submit_bio (96,921 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1333.0" y="309" width="0.4" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="1336.04" y="319.5" ></text>
+</g>
+<g >
+<title>do_idle (1,973,195 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="661" width="8.1" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="977.48" y="671.5" ></text>
+</g>
+<g >
+<title>arm_smmu_map_pages (41,106 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="101" width="0.2" height="15.0" fill="rgb(233,130,31)" rx="2" ry="2" />
+<text  x="1334.79" y="111.5" ></text>
+</g>
+<g >
+<title>mntput_no_expire (287,738 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1533.4" y="469" width="1.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1536.39" y="479.5" ></text>
+</g>
+<g >
+<title>getname_flags.part.0 (972,185 instructions (user code and WFI: time x 1.8/ns), 0.25%)</title><rect x="1562.7" y="501" width="4.0" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1565.73" y="511.5" ></text>
+</g>
+<g >
+<title>path_init (526,482 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1544.4" y="469" width="2.2" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="1547.39" y="479.5" ></text>
+</g>
+<g >
+<title>vectors (193,044 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="320.9" y="629" width="0.8" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="323.94" y="639.5" ></text>
+</g>
+<g >
+<title>kernfs_get_inode (280,947 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1548.9" y="421" width="1.1" height="15.0" fill="rgb(222,79,18)" rx="2" ry="2" />
+<text  x="1551.87" y="431.5" ></text>
+</g>
+<g >
+<title>do_interrupt_handler (64,569 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="581" width="0.3" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="1326.94" y="591.5" ></text>
+</g>
+<g >
+<title>__d_alloc (133,441 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1547.8" y="421" width="0.6" height="15.0" fill="rgb(247,197,47)" rx="2" ry="2" />
+<text  x="1550.84" y="431.5" ></text>
+</g>
+<g >
+<title>ret_to_user (767,925 instructions (user code and WFI: time x 1.8/ns), 0.20%)</title><rect x="1586.3" y="645" width="3.1" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<text  x="1589.27" y="655.5" ></text>
+</g>
+<g >
+<title>_ext4_get_block (55,411 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1332.3" y="309" width="0.2" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="1335.27" y="319.5" ></text>
+</g>
+<g >
+<title>inode_permission (62,880 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1493.4" y="453" width="0.3" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1496.41" y="463.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (1,930,275 instructions (user code and WFI: time x 1.8/ns), 0.50%)</title><rect x="1520.8" y="469" width="7.9" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1523.79" y="479.5" ></text>
+</g>
+<g >
+<title>getname_flags.part.0 (44,400 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1495.4" y="501" width="0.2" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1498.42" y="511.5" ></text>
+</g>
+<g >
+<title>hrtimer_interrupt (37,555 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="453" width="0.2" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="976.74" y="463.5" ></text>
+</g>
+<g >
+<title>default_idle_call (79,967,399 instructions (user code and WFI: time x 1.8/ns), 20.86%)</title><rect x="324.1" y="645" width="329.5" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="327.08" y="655.5" >default_idle_call</text>
+</g>
+<g >
+<title>blk_mq_run_hw_queue (63,542 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="309" width="0.3" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="1326.63" y="319.5" ></text>
+</g>
+<g >
+<title>alloc_inode (198,365 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1549.0" y="389" width="0.8" height="15.0" fill="rgb(216,55,13)" rx="2" ry="2" />
+<text  x="1552.01" y="399.5" ></text>
+</g>
+<g >
+<title>bio_endio (47,837 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1323.6" y="165" width="0.2" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="1326.65" y="175.5" ></text>
+</g>
+<g >
+<title>d_same_name (27,718 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1578.2" y="421" width="0.1" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1581.22" y="431.5" ></text>
+</g>
+<g >
+<title>sdhci_send_command (27,639 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.9" y="149" width="0.1" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="1333.89" y="159.5" ></text>
+</g>
+<g >
+<title>__slab_alloc.isra.0 (32,490 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1580.8" y="373" width="0.1" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1583.76" y="383.5" ></text>
+</g>
+<g >
+<title>kernfs_dop_revalidate (173,275 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1578.4" y="437" width="0.7" height="15.0" fill="rgb(229,110,26)" rx="2" ry="2" />
+<text  x="1581.37" y="447.5" ></text>
+</g>
+<g >
+<title>lockref_get_not_dead (47,344 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1543.9" y="421" width="0.2" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1546.86" y="431.5" ></text>
+</g>
+<g >
+<title>kernfs_get_inode (120,480 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1494.6" y="421" width="0.5" height="15.0" fill="rgb(222,79,18)" rx="2" ry="2" />
+<text  x="1497.58" y="431.5" ></text>
+</g>
+<g >
+<title>do_faccessat (763,882 instructions (user code and WFI: time x 1.8/ns), 0.20%)</title><rect x="1492.6" y="533" width="3.1" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="1495.58" y="543.5" ></text>
+</g>
+<g >
+<title>sha256sum [1056] (85,380,050 instructions (user code and WFI: time x 1.8/ns), 22.27%)</title><rect x="982.6" y="693" width="351.9" height="15.0" fill="rgb(242,170,40)" rx="2" ry="2" />
+<text  x="985.61" y="703.5" >sha256sum [1056]</text>
+</g>
+<g >
+<title>core 2 (77,822,311 instructions (user code and WFI: time x 1.8/ns), 20.30%)</title><rect x="653.7" y="709" width="320.8" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="656.75" y="719.5" >core 2</text>
+</g>
+<g >
+<title>page_cache_ra_order (871,150 instructions (user code and WFI: time x 1.8/ns), 0.23%)</title><rect x="1330.1" y="405" width="3.6" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1333.08" y="415.5" ></text>
+</g>
+<g >
+<title>lockref_get (66,612 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1558.9" y="437" width="0.3" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="1561.88" y="447.5" ></text>
+</g>
+<g >
+<title>generic_file_read_iter (2,100,628 instructions (user code and WFI: time x 1.8/ns), 0.55%)</title><rect x="1325.6" y="485" width="8.7" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1328.61" y="495.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (55,338 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1583.9" y="517" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1586.89" y="527.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_complete_rq (46,080 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.6" y="613" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="325.61" y="623.5" ></text>
+</g>
+<g >
+<title>proc_fd_link (38,880 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1555.9" y="453" width="0.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1558.94" y="463.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync (77,818 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="661" width="0.3" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1326.61" y="671.5" ></text>
+</g>
+<g >
+<title>arch_sync_dma_for_device (149,654 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1331.1" y="117" width="0.7" height="15.0" fill="rgb(239,159,38)" rx="2" ry="2" />
+<text  x="1334.13" y="127.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_post_req (61,621 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="213" width="0.3" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="1326.63" y="223.5" ></text>
+</g>
+<g >
+<title>putname (29,520 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1495.6" y="501" width="0.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1498.60" y="511.5" ></text>
+</g>
+<g >
+<title>filename_lookup (565,082 instructions (user code and WFI: time x 1.8/ns), 0.15%)</title><rect x="1493.1" y="501" width="2.3" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1496.09" y="511.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (26,350 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1552.6" y="421" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1555.59" y="431.5" ></text>
+</g>
+<g >
+<title>user_path_at (646,442 instructions (user code and WFI: time x 1.8/ns), 0.17%)</title><rect x="1493.1" y="517" width="2.6" height="15.0" fill="rgb(251,213,50)" rx="2" ry="2" />
+<text  x="1496.06" y="527.5" ></text>
+</g>
+<g >
+<title>task_tick_fair (30,025 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1324.0" y="389" width="0.1" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="1327.02" y="399.5" ></text>
+</g>
+<g >
+<title>dcache_inval_poc (142,690 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="323.3" y="533" width="0.6" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="326.29" y="543.5" ></text>
+</g>
+<g >
+<title>iget_locked (234,551 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1548.9" y="405" width="1.0" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1551.90" y="415.5" ></text>
+</g>
+<g >
+<title>new_slab (30,614 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1549.7" y="325" width="0.1" height="15.0" fill="rgb(217,59,14)" rx="2" ry="2" />
+<text  x="1552.68" y="335.5" ></text>
+</g>
+<g >
+<title>sysfs_emit_at (320,398 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1574.1" y="405" width="1.3" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="1577.09" y="415.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync_handler (37,577 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="629" width="0.2" height="15.0" fill="rgb(211,32,7)" rx="2" ry="2" />
+<text  x="977.32" y="639.5" ></text>
+</g>
+<g >
+<title>__filemap_add_folio (61,557 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1330.1" y="373" width="0.3" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="1333.12" y="383.5" ></text>
+</g>
+<g >
+<title>__submit_bio (75,921 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.1" y="261" width="0.3" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1336.12" y="271.5" ></text>
+</g>
+<g >
+<title>call_on_irq_stack (64,197 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="565" width="0.3" height="15.0" fill="rgb(239,156,37)" rx="2" ry="2" />
+<text  x="1326.94" y="575.5" ></text>
+</g>
+<g >
+<title>vectors (31,084,916 instructions (user code and WFI: time x 1.8/ns), 8.11%)</title><rect x="1461.9" y="661" width="128.1" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1464.89" y="671.5" >vectors</text>
+</g>
+<g >
+<title>cortex_a76_erratum_1463225_svc_handler (68,252 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1471.0" y="597" width="0.2" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1473.95" y="607.5" ></text>
+</g>
+<g >
+<title>rtt-console [127] (70,265 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="974.2" y="693" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="977.19" y="703.5" ></text>
+</g>
+<g >
+<title>blk_mq_flush_plug_list (63,617 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="341" width="0.3" height="15.0" fill="rgb(215,46,11)" rx="2" ry="2" />
+<text  x="1326.63" y="351.5" ></text>
+</g>
+<g >
+<title>el0_svc (2,394,438 instructions (user code and WFI: time x 1.8/ns), 0.62%)</title><rect x="1324.5" y="613" width="9.9" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1327.49" y="623.5" ></text>
+</g>
+<g >
+<title>inode_permission (64,005 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1531.1" y="469" width="0.2" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1534.08" y="479.5" ></text>
+</g>
+<g >
+<title>from_kgid_munged (223,668 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1503.2" y="501" width="0.9" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1506.18" y="511.5" ></text>
+</g>
+<g >
+<title>get_unused_fd_flags (538,125 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1560.3" y="517" width="2.2" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1563.25" y="527.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_unmap (46,002 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="469" width="0.2" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="326.08" y="479.5" ></text>
+</g>
+<g >
+<title>add_uevent_var (443,995 instructions (user code and WFI: time x 1.8/ns), 0.12%)</title><rect x="1571.2" y="373" width="1.8" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1574.15" y="383.5" ></text>
+</g>
+<g >
+<title>fdget_raw (57,120 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1545.9" y="453" width="0.2" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1548.90" y="463.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_complete_work (311,818 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="322.6" y="645" width="1.3" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="325.59" y="655.5" ></text>
+</g>
+<g >
+<title>touch_atime (95,612 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.9" y="453" width="0.4" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="1336.88" y="463.5" ></text>
+</g>
+<g >
+<title>walk_component (468,333 instructions (user code and WFI: time x 1.8/ns), 0.12%)</title><rect x="1577.6" y="469" width="2.0" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1580.63" y="479.5" ></text>
+</g>
+<g >
+<title>filemap_read (76,453 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="469" width="0.3" height="15.0" fill="rgb(246,192,46)" rx="2" ry="2" />
+<text  x="1326.61" y="479.5" ></text>
+</g>
+<g >
+<title>__lookup_slow (564,567 instructions (user code and WFI: time x 1.8/ns), 0.15%)</title><rect x="1547.7" y="453" width="2.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="1550.72" y="463.5" ></text>
+</g>
+<g >
+<title>mntput (364,261 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1489.7" y="501" width="1.5" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="1492.67" y="511.5" ></text>
+</g>
+<g >
+<title>link_path_walk (917,691 instructions (user code and WFI: time x 1.8/ns), 0.24%)</title><rect x="1575.8" y="485" width="3.8" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1578.78" y="495.5" ></text>
+</g>
+<g >
+<title>dput (270,422 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1480.2" y="501" width="1.1" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1483.18" y="511.5" ></text>
+</g>
+<g >
+<title>getname_flags (66,408 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1581.4" y="517" width="0.3" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1584.38" y="527.5" ></text>
+</g>
+<g >
+<title>kernfs_refresh_inode (52,624 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1577.1" y="437" width="0.2" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="1580.07" y="447.5" ></text>
+</g>
+<g >
+<title>arm_smmu_unmap_pages (48,837 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="517" width="0.2" height="15.0" fill="rgb(216,54,13)" rx="2" ry="2" />
+<text  x="326.07" y="527.5" ></text>
+</g>
+<g >
+<title>complete_walk (396,077 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1535.7" y="469" width="1.6" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="1538.67" y="479.5" ></text>
+</g>
+<g >
+<title>__kmalloc_cache_noprof (51,531 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1558.0" y="437" width="0.2" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1561.02" y="447.5" ></text>
+</g>
+<g >
+<title>el0_svc_common.constprop.0 (77,047 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="581" width="0.3" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1326.61" y="591.5" ></text>
+</g>
+<g >
+<title>do_filp_open (10,975,014 instructions (user code and WFI: time x 1.8/ns), 2.86%)</title><rect x="1514.5" y="517" width="45.2" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1517.45" y="527.5" >do_f..</text>
+</g>
+<g >
+<title>__blk_flush_plug (354,749 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.6" y="357" width="1.5" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="1333.63" y="367.5" ></text>
+</g>
+<g >
+<title>path_get (271,572 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1558.6" y="453" width="1.1" height="15.0" fill="rgb(211,29,7)" rx="2" ry="2" />
+<text  x="1561.56" y="463.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_newfstat (3,181,466 instructions (user code and WFI: time x 1.8/ns), 0.83%)</title><rect x="1498.2" y="549" width="13.1" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1501.23" y="559.5" ></text>
+</g>
+<g >
+<title>strlen (39,360 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1583.1" y="485" width="0.1" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1586.07" y="495.5" ></text>
+</g>
+<g >
+<title>vsnprintf (30,170 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1570.9" y="373" width="0.1" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1573.91" y="383.5" ></text>
+</g>
+<g >
+<title>obj_cgroup_uncharge_pages (47,095 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1482.1" y="405" width="0.2" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1485.12" y="415.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync (38,397 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="645" width="0.2" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="977.32" y="655.5" ></text>
+</g>
+<g >
+<title>blk_mq_run_hw_queue (341,521 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.6" y="309" width="1.5" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="1333.65" y="319.5" ></text>
+</g>
+<g >
+<title>snprintf (139,644 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1573.4" y="341" width="0.6" height="15.0" fill="rgb(253,220,52)" rx="2" ry="2" />
+<text  x="1576.41" y="351.5" ></text>
+</g>
+<g >
+<title>walk_component (387,472 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1579.8" y="485" width="1.6" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1582.78" y="495.5" ></text>
+</g>
+<g >
+<title>folio_alloc_buffers (69,868 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1332.5" y="293" width="0.3" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1335.50" y="303.5" ></text>
+</g>
+<g >
+<title>inode_init_always_gfp (42,380 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1549.0" y="373" width="0.2" height="15.0" fill="rgb(209,21,5)" rx="2" ry="2" />
+<text  x="1552.02" y="383.5" ></text>
+</g>
+<g >
+<title>__d_lookup_rcu (30,221 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1531.6" y="437" width="0.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1534.58" y="447.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (298,765 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1515.9" y="501" width="1.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1518.91" y="511.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_fstatfs (551,226 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1495.7" y="549" width="2.3" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1498.73" y="559.5" ></text>
+</g>
+<g >
+<title>idle [0] (1,973,349 instructions (user code and WFI: time x 1.8/ns), 0.51%)</title><rect x="974.5" y="693" width="8.1" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="977.48" y="703.5" ></text>
+</g>
+<g >
+<title>create_empty_buffers (70,692 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1332.5" y="309" width="0.3" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
+<text  x="1335.50" y="319.5" ></text>
+</g>
+<g >
+<title>sprintf (60,160 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1532.3" y="421" width="0.3" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1535.31" y="431.5" ></text>
+</g>
+<g >
+<title>__d_lookup (108,978 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1577.9" y="437" width="0.4" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1580.89" y="447.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_openat (14,070,371 instructions (user code and WFI: time x 1.8/ns), 3.67%)</title><rect x="1511.3" y="549" width="58.0" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1514.34" y="559.5" >__arm6..</text>
+</g>
+<g >
+<title>sdhci_post_req (239,602 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="322.9" y="613" width="1.0" height="15.0" fill="rgb(206,4,1)" rx="2" ry="2" />
+<text  x="325.89" y="623.5" ></text>
+</g>
+<g >
+<title>lookup_fast (50,272 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1495.1" y="453" width="0.2" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1498.10" y="463.5" ></text>
+</g>
+<g >
+<title>strcmp (80,263 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1553.4" y="421" width="0.4" height="15.0" fill="rgb(217,58,13)" rx="2" ry="2" />
+<text  x="1556.43" y="431.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (57,720 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1496.0" y="517" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1498.98" y="527.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (24,805 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1530.2" y="469" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1533.21" y="479.5" ></text>
+</g>
+<g >
+<title>__el0_irq_handler_common (74,248 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="613" width="0.3" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1326.94" y="623.5" ></text>
+</g>
+<g >
+<title>handle_irq_event (74,772 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="321.0" y="469" width="0.3" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="324.03" y="479.5" ></text>
+</g>
+<g >
+<title>[WFI: core asleep] (79,941,607 instructions (user code and WFI: time x 1.8/ns), 20.85%)</title><rect x="324.1" y="613" width="329.4" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="327.08" y="623.5" >[WFI: core asleep]</text>
+</g>
+<g >
+<title>ksys_read (1,494,907 instructions (user code and WFI: time x 1.8/ns), 0.39%)</title><rect x="1569.3" y="533" width="6.2" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="1572.34" y="543.5" ></text>
+</g>
+<g >
+<title>try_to_unlazy (408,342 instructions (user code and WFI: time x 1.8/ns), 0.11%)</title><rect x="1542.7" y="453" width="1.7" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1545.71" y="463.5" ></text>
+</g>
+<g >
+<title>__kernfs_iattrs (47,344 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1542.0" y="405" width="0.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1545.01" y="415.5" ></text>
+</g>
+<g >
+<title>blk_mq_sched_dispatch_requests (63,504 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="293" width="0.3" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1326.63" y="303.5" ></text>
+</g>
+<g >
+<title>sdhci_request (30,614 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.9" y="181" width="0.1" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="1333.88" y="191.5" ></text>
+</g>
+<g >
+<title>lookup_fast (902,576 instructions (user code and WFI: time x 1.8/ns), 0.24%)</title><rect x="1550.3" y="453" width="3.7" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1553.31" y="463.5" ></text>
+</g>
+<g >
+<title>[WFI: core asleep] (144,269 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="321.9" y="629" width="0.6" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="324.95" y="639.5" ></text>
+</g>
+<g >
+<title>vfs_readlink (307,616 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1582.2" y="517" width="1.3" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="1585.20" y="527.5" ></text>
+</g>
+<g >
+<title>core 4 (61,996,466 instructions (user code and WFI: time x 1.8/ns), 16.17%)</title><rect x="1334.5" y="709" width="255.5" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="1337.49" y="719.5" >core 4</text>
+</g>
+<g >
+<title>kernfs_dop_revalidate (29,280 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.1" y="453" width="0.2" height="15.0" fill="rgb(229,110,26)" rx="2" ry="2" />
+<text  x="1584.15" y="463.5" ></text>
+</g>
+<g >
+<title>__arm_lpae_unmap (47,838 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="485" width="0.2" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="326.07" y="495.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (25,610 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1480.6" y="485" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1483.56" y="495.5" ></text>
+</g>
+<g >
+<title>sha256sum [1056] (user code) (85,380,050 instructions (user code and WFI: time x 1.8/ns), 22.27%)</title><rect x="982.6" y="677" width="351.9" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="985.61" y="687.5" >sha256sum [1056] (user code)</text>
+</g>
+<g >
+<title>__kmalloc_cache_noprof (64,480 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1570.6" y="405" width="0.2" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1573.58" y="415.5" ></text>
+</g>
+<g >
+<title>do_el0_svc (37,247 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="597" width="0.2" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="977.32" y="607.5" ></text>
+</g>
+<g >
+<title>do_dentry_open (676,429 instructions (user code and WFI: time x 1.8/ns), 0.18%)</title><rect x="1556.9" y="469" width="2.8" height="15.0" fill="rgb(243,175,41)" rx="2" ry="2" />
+<text  x="1559.90" y="479.5" ></text>
+</g>
+<g >
+<title>ext4_file_read_iter (76,486 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="501" width="0.3" height="15.0" fill="rgb(244,180,43)" rx="2" ry="2" />
+<text  x="1326.61" y="511.5" ></text>
+</g>
+<g >
+<title>blk_attempt_plug_merge (40,241 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.2" y="229" width="0.2" height="15.0" fill="rgb(242,173,41)" rx="2" ry="2" />
+<text  x="1336.24" y="239.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (548,375 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1563.5" y="485" width="2.2" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1566.49" y="495.5" ></text>
+</g>
+<g >
+<title>path_lookupat (5,043,083 instructions (user code and WFI: time x 1.8/ns), 1.32%)</title><rect x="1534.7" y="485" width="20.7" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1537.66" y="495.5" ></text>
+</g>
+<g >
+<title>from_kgid_munged (45,714 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1585.0" y="501" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1588.05" y="511.5" ></text>
+</g>
+<g >
+<title>kvfree_call_rcu (25,920 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1481.4" y="469" width="0.1" height="15.0" fill="rgb(239,157,37)" rx="2" ry="2" />
+<text  x="1484.41" y="479.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (84,808 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1548.0" y="389" width="0.3" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1550.96" y="399.5" ></text>
+</g>
+<g >
+<title>rwsem_read_trylock (63,414 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1509.0" y="453" width="0.3" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1512.03" y="463.5" ></text>
+</g>
+<g >
+<title>filemap_get_read_batch (149,933 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1329.4" y="437" width="0.7" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="1332.45" y="447.5" ></text>
+</g>
+<g >
+<title>__update_cpu_freelist_fast (164,000 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1528.1" y="453" width="0.6" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1531.07" y="463.5" ></text>
+</g>
+<g >
+<title>el0_svc_common.constprop.0 (37,177 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="581" width="0.2" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="977.32" y="591.5" ></text>
+</g>
+<g >
+<title>proc_pid_get_link (87,200 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1555.8" y="469" width="0.3" height="15.0" fill="rgb(213,38,9)" rx="2" ry="2" />
+<text  x="1558.78" y="479.5" ></text>
+</g>
+<g >
+<title>do_sys_poll (34,447 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="533" width="0.2" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="977.33" y="543.5" ></text>
+</g>
+<g >
+<title>d_alloc_parallel (162,628 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1547.8" y="437" width="0.6" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="1550.75" y="447.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync_handler (77,680 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="629" width="0.3" height="15.0" fill="rgb(211,32,7)" rx="2" ry="2" />
+<text  x="1326.61" y="639.5" ></text>
+</g>
+<g >
+<title>vfs_statfs.part.0.isra.0 (50,505 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1497.8" y="501" width="0.2" height="15.0" fill="rgb(236,146,35)" rx="2" ry="2" />
+<text  x="1500.78" y="511.5" ></text>
+</g>
+<g >
+<title>___slab_alloc (32,340 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1580.8" y="357" width="0.1" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="1583.76" y="367.5" ></text>
+</g>
+<g >
+<title>all (383,370,029 instructions (user code and WFI: time x 1.8/ns), 100%)</title><rect x="10.0" y="725" width="1580.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="735.5" ></text>
+</g>
+<g >
+<title>kernfs_dop_revalidate (475,513 instructions (user code and WFI: time x 1.8/ns), 0.12%)</title><rect x="1552.1" y="437" width="1.9" height="15.0" fill="rgb(229,110,26)" rx="2" ry="2" />
+<text  x="1555.07" y="447.5" ></text>
+</g>
+<g >
+<title>getname_flags.part.0 (63,528 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1581.4" y="501" width="0.3" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1584.39" y="511.5" ></text>
+</g>
+<g >
+<title>gic_handle_irq (63,981 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="549" width="0.3" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="1326.94" y="559.5" ></text>
+</g>
+<g >
+<title>step_into (26,085 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1495.3" y="453" width="0.1" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1498.31" y="463.5" ></text>
+</g>
+<g >
+<title>inode_permission (34,400 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.7" y="517" width="0.1" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1495.66" y="527.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (42,160 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1552.7" y="421" width="0.2" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1555.70" y="431.5" ></text>
+</g>
+<g >
+<title>do_el0_svc (27,912,539 instructions (user code and WFI: time x 1.8/ns), 7.28%)</title><rect x="1471.2" y="597" width="115.1" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="1474.23" y="607.5" >do_el0_svc</text>
+</g>
+<g >
+<title>sdhci_pre_dma_transfer (229,544 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1331.0" y="197" width="1.0" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1334.02" y="207.5" ></text>
+</g>
+<g >
+<title>submit_bio (38,692 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.5" y="341" width="0.2" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="1336.50" y="351.5" ></text>
+</g>
+<g >
+<title>try_to_unlazy (33,120 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1493.7" y="453" width="0.1" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1496.68" y="463.5" ></text>
+</g>
+<g >
+<title>fput_close_sync (3,499,134 instructions (user code and WFI: time x 1.8/ns), 0.91%)</title><rect x="1478.1" y="533" width="14.5" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1481.14" y="543.5" ></text>
+</g>
+<g >
+<title>mntput_no_expire (302,797 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1489.9" y="485" width="1.3" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1492.92" y="495.5" ></text>
+</g>
+<g >
+<title>up_read (63,240 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1553.8" y="421" width="0.2" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="1556.77" y="431.5" ></text>
+</g>
+<g >
+<title>dev_attr_show (1,187,574 instructions (user code and WFI: time x 1.8/ns), 0.31%)</title><rect x="1570.5" y="437" width="4.9" height="15.0" fill="rgb(213,37,9)" rx="2" ry="2" />
+<text  x="1573.51" y="447.5" ></text>
+</g>
+<g >
+<title>kworker/0:1H-mmc_complete [68] (365,711 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="322.6" y="693" width="1.5" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="325.56" y="703.5" ></text>
+</g>
+<g >
+<title>step_into (116,228 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1579.1" y="453" width="0.5" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1582.08" y="463.5" ></text>
+</g>
+<g >
+<title>xas_load (50,601 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1329.9" y="421" width="0.2" height="15.0" fill="rgb(217,59,14)" rx="2" ry="2" />
+<text  x="1332.86" y="431.5" ></text>
+</g>
+<g >
+<title>atime_needs_update (34,688 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1582.1" y="501" width="0.1" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1585.05" y="511.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (28,184 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1508.4" y="469" width="0.1" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1511.42" y="479.5" ></text>
+</g>
+<g >
+<title>string (48,690 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1572.6" y="293" width="0.2" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1575.57" y="303.5" ></text>
+</g>
+<g >
+<title>generic_handle_domain_irq (63,705 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="533" width="0.3" height="15.0" fill="rgb(254,229,54)" rx="2" ry="2" />
+<text  x="1326.94" y="543.5" ></text>
+</g>
+<g >
+<title>kernfs_statfs (49,062 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1497.5" y="485" width="0.2" height="15.0" fill="rgb(237,149,35)" rx="2" ry="2" />
+<text  x="1500.55" y="495.5" ></text>
+</g>
+<g >
+<title>dput (43,976 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1579.4" y="437" width="0.2" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1582.38" y="447.5" ></text>
+</g>
+<g >
+<title>mmc_request_done (38,908 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.1" y="421" width="0.2" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
+<text  x="324.15" y="431.5" ></text>
+</g>
+<g >
+<title>update_process_times (45,607 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1324.0" y="421" width="0.2" height="15.0" fill="rgb(250,209,50)" rx="2" ry="2" />
+<text  x="1326.98" y="431.5" ></text>
+</g>
+<g >
+<title>strncpy_from_user (29,208 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.5" y="485" width="0.2" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1584.53" y="495.5" ></text>
+</g>
+<g >
+<title>vfs_read (76,924 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="517" width="0.3" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1326.61" y="527.5" ></text>
+</g>
+<g >
+<title>cpu_startup_entry (77,747,058 instructions (user code and WFI: time x 1.8/ns), 20.28%)</title><rect x="653.7" y="677" width="320.5" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="656.75" y="687.5" >cpu_startup_entry</text>
+</g>
+<g >
+<title>cp_new_stat (1,255,680 instructions (user code and WFI: time x 1.8/ns), 0.33%)</title><rect x="1499.9" y="517" width="5.1" height="15.0" fill="rgb(223,83,19)" rx="2" ry="2" />
+<text  x="1502.87" y="527.5" ></text>
+</g>
+<g >
+<title>step_into (333,025 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1554.0" y="453" width="1.4" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1557.03" y="463.5" ></text>
+</g>
+<g >
+<title>__d_lookup (304,614 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1550.7" y="437" width="1.3" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1553.73" y="447.5" ></text>
+</g>
+<g >
+<title>obj_cgroup_charge_account (32,767 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1549.4" y="341" width="0.2" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="1552.44" y="351.5" ></text>
+</g>
+<g >
+<title>of_fwnode_get_parent (46,172 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1572.3" y="277" width="0.2" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="1575.29" y="287.5" ></text>
+</g>
+<g >
+<title>mmc_mq_queue_rq (63,348 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="245" width="0.3" height="15.0" fill="rgb(227,104,24)" rx="2" ry="2" />
+<text  x="1326.63" y="255.5" ></text>
+</g>
+<g >
+<title>vectors (38,477 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="661" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="977.32" y="671.5" ></text>
+</g>
+<g >
+<title>__schedule (40,613 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.9" y="645" width="0.2" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="326.89" y="655.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (69,360 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1582.6" y="469" width="0.3" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1585.61" y="479.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (41,650 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1579.9" y="405" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1582.94" y="415.5" ></text>
+</g>
+<g >
+<title>__kmalloc_cache_noprof (96,720 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1582.5" y="485" width="0.4" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1585.54" y="495.5" ></text>
+</g>
+<g >
+<title>dput (41,276 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.7" y="501" width="0.1" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1584.67" y="511.5" ></text>
+</g>
+<g >
+<title>cpu_startup_entry (75,688,854 instructions (user code and WFI: time x 1.8/ns), 19.74%)</title><rect x="10.0" y="677" width="311.9" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="13.00" y="687.5" >cpu_startup_entry</text>
+</g>
+<g >
+<title>kernfs_iop_lookup (173,536 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1494.4" y="437" width="0.7" height="15.0" fill="rgb(222,80,19)" rx="2" ry="2" />
+<text  x="1497.36" y="447.5" ></text>
+</g>
+<g >
+<title>vfs_read (1,482,267 instructions (user code and WFI: time x 1.8/ns), 0.39%)</title><rect x="1569.4" y="517" width="6.1" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1572.39" y="527.5" ></text>
+</g>
+<g >
+<title>kfree (96,055 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1481.9" y="453" width="0.4" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1484.94" y="463.5" ></text>
+</g>
+<g >
+<title>iommu_map_sg (52,048 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="133" width="0.2" height="15.0" fill="rgb(214,42,10)" rx="2" ry="2" />
+<text  x="1334.75" y="143.5" ></text>
+</g>
+<g >
+<title>__legitimize_path (30,800 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1577.5" y="453" width="0.1" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="1580.48" y="463.5" ></text>
+</g>
+<g >
+<title>refill_obj_stock (41,120 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1569.9" y="421" width="0.2" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1572.91" y="431.5" ></text>
+</g>
+<g >
+<title>fdget_raw (24,531 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1497.0" y="501" width="0.1" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1500.02" y="511.5" ></text>
+</g>
+<g >
+<title>__d_add (37,331 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1548.5" y="389" width="0.2" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="1551.50" y="399.5" ></text>
+</g>
+<g >
+<title>mntput (347,270 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1533.1" y="485" width="1.5" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="1536.14" y="495.5" ></text>
+</g>
+<g >
+<title>_raw_spin_lock (51,230 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1476.3" y="517" width="0.3" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1479.34" y="527.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_permission (28,160 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.7" y="501" width="0.1" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1495.68" y="511.5" ></text>
+</g>
+<g >
+<title>filp_flush (140,880 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1477.6" y="533" width="0.5" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="1480.56" y="543.5" ></text>
+</g>
+<g >
+<title>sysfs_kf_seq_show (1,247,254 instructions (user code and WFI: time x 1.8/ns), 0.33%)</title><rect x="1570.3" y="453" width="5.1" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="1573.27" y="463.5" ></text>
+</g>
+<g >
+<title>refill_obj_stock (569,211 instructions (user code and WFI: time x 1.8/ns), 0.15%)</title><rect x="1486.1" y="469" width="2.4" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1489.14" y="479.5" ></text>
+</g>
+<g >
+<title>default_idle_call (77,711,393 instructions (user code and WFI: time x 1.8/ns), 20.27%)</title><rect x="653.8" y="645" width="320.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="656.75" y="655.5" >default_idle_call</text>
+</g>
+<g >
+<title>el0t_64_sync (30,164,907 instructions (user code and WFI: time x 1.8/ns), 7.87%)</title><rect x="1462.0" y="645" width="124.3" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1464.95" y="655.5" >el0t_64_sync</text>
+</g>
+<g >
+<title>d_alloc_parallel (79,210 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1579.8" y="453" width="0.4" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="1582.83" y="463.5" ></text>
+</g>
+<g >
+<title>putname (29,520 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.9" y="517" width="0.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="1584.91" y="527.5" ></text>
+</g>
+<g >
+<title>filemap_alloc_folio_noprof (26,803 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.5" y="389" width="0.1" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1333.51" y="399.5" ></text>
+</g>
+<g >
+<title>file_close_fd_locked (192,355 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1476.7" y="517" width="0.8" height="15.0" fill="rgb(236,146,34)" rx="2" ry="2" />
+<text  x="1479.74" y="527.5" ></text>
+</g>
+<g >
+<title>link_path_walk (129,120 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1493.3" y="469" width="0.5" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1496.28" y="479.5" ></text>
+</g>
+<g >
+<title>handle_fasteoi_irq (81,306 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="321.0" y="485" width="0.3" height="15.0" fill="rgb(210,26,6)" rx="2" ry="2" />
+<text  x="324.01" y="495.5" ></text>
+</g>
+<g >
+<title>alloc_fd (476,625 instructions (user code and WFI: time x 1.8/ns), 0.12%)</title><rect x="1560.5" y="501" width="2.0" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1563.51" y="511.5" ></text>
+</g>
+<g >
+<title>bio_endio (28,641 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.7" y="581" width="0.1" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="325.68" y="591.5" ></text>
+</g>
+<g >
+<title>ksys_read (2,322,770 instructions (user code and WFI: time x 1.8/ns), 0.61%)</title><rect x="1324.8" y="533" width="9.6" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="1327.79" y="543.5" ></text>
+</g>
+<g >
+<title>__account_obj_stock (31,200 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1481.8" y="421" width="0.1" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1484.77" y="431.5" ></text>
+</g>
+<g >
+<title>__handle_irq_event_percpu (64,777 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="321.0" y="453" width="0.3" height="15.0" fill="rgb(236,147,35)" rx="2" ry="2" />
+<text  x="324.04" y="463.5" ></text>
+</g>
+<g >
+<title>dev_uevent (769,606 instructions (user code and WFI: time x 1.8/ns), 0.20%)</title><rect x="1570.8" y="405" width="3.2" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1573.84" y="415.5" ></text>
+</g>
+<g >
+<title>arm_lpae_unmap_pages (48,567 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="501" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="326.07" y="511.5" ></text>
+</g>
+<g >
+<title>kmem_cache_free (1,655,075 instructions (user code and WFI: time x 1.8/ns), 0.43%)</title><rect x="1482.3" y="501" width="6.9" height="15.0" fill="rgb(254,225,53)" rx="2" ry="2" />
+<text  x="1485.34" y="511.5" ></text>
+</g>
+<g >
+<title>obj_cgroup_charge_account (108,536 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1569.7" y="437" width="0.5" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="1572.71" y="447.5" ></text>
+</g>
+<g >
+<title>fd_install (138,348 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1559.7" y="517" width="0.6" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1562.68" y="527.5" ></text>
+</g>
+<g >
+<title>generic_fillattr (33,684 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1507.7" y="469" width="0.1" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1510.70" y="479.5" ></text>
+</g>
+<g >
+<title>atime_needs_update (86,284 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.9" y="437" width="0.4" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1336.92" y="447.5" ></text>
+</g>
+<g >
+<title>do_interrupt_handler (42,855 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="565" width="0.2" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="976.72" y="575.5" ></text>
+</g>
+<g >
+<title>kernfs_fop_read_iter (1,455,772 instructions (user code and WFI: time x 1.8/ns), 0.38%)</title><rect x="1569.5" y="501" width="6.0" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1572.47" y="511.5" ></text>
+</g>
+<g >
+<title>inode_permission (794,907 instructions (user code and WFI: time x 1.8/ns), 0.21%)</title><rect x="1539.3" y="453" width="3.3" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1542.35" y="463.5" ></text>
+</g>
+<g >
+<title>__legitimize_mnt (76,114 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1536.6" y="421" width="0.3" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1539.63" y="431.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (65,595 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1558.3" y="421" width="0.3" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1561.29" y="431.5" ></text>
+</g>
+<g >
+<title>locks_remove_file (122,928 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1489.2" y="501" width="0.5" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="1492.16" y="511.5" ></text>
+</g>
+<g >
+<title>tick_nohz_handler (50,559 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1324.0" y="437" width="0.2" height="15.0" fill="rgb(248,200,48)" rx="2" ry="2" />
+<text  x="1326.96" y="447.5" ></text>
+</g>
+<g >
+<title>dcache_clean_poc (148,874 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1331.1" y="101" width="0.7" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="1334.14" y="111.5" ></text>
+</g>
+<g >
+<title>tid_fd_revalidate (46,720 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1532.6" y="469" width="0.2" height="15.0" fill="rgb(229,112,27)" rx="2" ry="2" />
+<text  x="1535.63" y="479.5" ></text>
+</g>
+<g >
+<title>page_cache_ra_order (63,696 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="405" width="0.3" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1326.63" y="415.5" ></text>
+</g>
+<g >
+<title>arm_lpae_map_pages (40,469 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="85" width="0.2" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1334.79" y="95.5" ></text>
+</g>
+<g >
+<title>invoke_syscall.constprop.0 (27,366,511 instructions (user code and WFI: time x 1.8/ns), 7.14%)</title><rect x="1473.5" y="565" width="112.8" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1476.49" y="575.5" >invoke_syscal..</text>
+</g>
+<g >
+<title>fwnode_get_nth_parent (67,556 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1572.2" y="293" width="0.3" height="15.0" fill="rgb(220,73,17)" rx="2" ry="2" />
+<text  x="1575.25" y="303.5" ></text>
+</g>
+<g >
+<title>submit_bio_noacct_nocheck (83,171 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1333.1" y="277" width="0.3" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="1336.10" y="287.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_ppoll (36,877 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="549" width="0.2" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="977.33" y="559.5" ></text>
+</g>
+<g >
+<title>try_to_unlazy_next (36,320 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1532.8" y="469" width="0.2" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1535.83" y="479.5" ></text>
+</g>
+<g >
+<title>core 1 (79,991,152 instructions (user code and WFI: time x 1.8/ns), 20.87%)</title><rect x="324.1" y="709" width="329.6" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="327.07" y="719.5" >core 1</text>
+</g>
+<g >
+<title>kernfs_iop_permission (47,280 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1493.5" y="437" width="0.2" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1496.47" y="447.5" ></text>
+</g>
+<g >
+<title>alloc_inode (80,560 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1494.6" y="389" width="0.4" height="15.0" fill="rgb(216,55,13)" rx="2" ry="2" />
+<text  x="1497.64" y="399.5" ></text>
+</g>
+<g >
+<title>call_on_irq_stack (29,982 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.6" y="517" width="0.1" height="15.0" fill="rgb(239,156,37)" rx="2" ry="2" />
+<text  x="324.55" y="527.5" ></text>
+</g>
+<g >
+<title>invoke_syscall.constprop.0 (37,037 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="974.3" y="565" width="0.2" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="977.32" y="575.5" ></text>
+</g>
+<g >
+<title>iterate_dir (55,605 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1498.0" y="533" width="0.2" height="15.0" fill="rgb(244,180,43)" rx="2" ry="2" />
+<text  x="1501.00" y="543.5" ></text>
+</g>
+<g >
+<title>terminate_walk (163,549 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1546.6" y="469" width="0.6" height="15.0" fill="rgb(206,4,1)" rx="2" ry="2" />
+<text  x="1549.56" y="479.5" ></text>
+</g>
+<g >
+<title>vsnprintf (423,259 instructions (user code and WFI: time x 1.8/ns), 0.11%)</title><rect x="1571.2" y="357" width="1.8" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1574.24" y="367.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_lookup (393,300 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1548.4" y="437" width="1.6" height="15.0" fill="rgb(222,80,19)" rx="2" ry="2" />
+<text  x="1551.42" y="447.5" ></text>
+</g>
+<g >
+<title>vfs_open (815,592 instructions (user code and WFI: time x 1.8/ns), 0.21%)</title><rect x="1556.3" y="485" width="3.4" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="1559.32" y="495.5" ></text>
+</g>
+<g >
+<title>vsnprintf (134,364 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1573.4" y="325" width="0.6" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1576.44" y="335.5" ></text>
+</g>
+<g >
+<title>iget_locked (98,320 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1494.6" y="405" width="0.4" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1497.59" y="415.5" ></text>
+</g>
+<g >
+<title>__blk_mq_sched_dispatch_requests (334,563 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.7" y="277" width="1.4" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="1333.68" y="287.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (58,546 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1584.8" y="501" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1587.81" y="511.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (58,293 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1494.1" y="405" width="0.2" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1497.11" y="415.5" ></text>
+</g>
+<g >
+<title>cpu_startup_entry (79,973,495 instructions (user code and WFI: time x 1.8/ns), 20.86%)</title><rect x="324.1" y="677" width="329.6" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="327.07" y="687.5" >cpu_startup_entry</text>
+</g>
+<g >
+<title>format_decode (50,301 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1571.5" y="341" width="0.2" height="15.0" fill="rgb(253,225,53)" rx="2" ry="2" />
+<text  x="1574.50" y="351.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (117,941 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1547.9" y="405" width="0.5" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1550.90" y="415.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (57,720 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1497.3" y="485" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1500.31" y="495.5" ></text>
+</g>
+<g >
+<title>el0_svc_common.constprop.0 (27,741,900 instructions (user code and WFI: time x 1.8/ns), 7.24%)</title><rect x="1471.9" y="581" width="114.4" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1474.94" y="591.5" >el0_svc_common..</text>
+</g>
+<g >
+<title>device_node_string (51,724 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1573.7" y="293" width="0.2" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="1576.69" y="303.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_statx (680,096 instructions (user code and WFI: time x 1.8/ns), 0.18%)</title><rect x="1583.5" y="549" width="2.8" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1586.47" y="559.5" ></text>
+</g>
+<g >
+<title>up_read (71,016 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1542.3" y="421" width="0.3" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="1545.26" y="431.5" ></text>
+</g>
+<g >
+<title>do_sys_openat2 (13,880,403 instructions (user code and WFI: time x 1.8/ns), 3.62%)</title><rect x="1512.1" y="533" width="57.2" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="1515.12" y="543.5" >do_sys..</text>
+</g>
+<g >
+<title>sdhci_send_command_retry (28,364 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.9" y="165" width="0.1" height="15.0" fill="rgb(237,150,36)" rx="2" ry="2" />
+<text  x="1333.89" y="175.5" ></text>
+</g>
+<g >
+<title>string (163,300 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1574.7" y="357" width="0.7" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1577.71" y="367.5" ></text>
+</g>
+<g >
+<title>udevadm [1061] (user code) (61,994,250 instructions (user code and WFI: time x 1.8/ns), 16.17%)</title><rect x="1334.5" y="677" width="255.5" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1337.50" y="687.5" >udevadm [1061] (user code)</text>
+</g>
+<g >
+<title>alloc_pages_mpol (24,266 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.5" y="341" width="0.1" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1333.52" y="351.5" ></text>
+</g>
+<g >
+<title>invoke_syscall.constprop.0 (77,023 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="565" width="0.3" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1326.61" y="575.5" ></text>
+</g>
+<g >
+<title>link_path_walk (1,720,553 instructions (user code and WFI: time x 1.8/ns), 0.45%)</title><rect x="1537.3" y="469" width="7.1" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1540.30" y="479.5" ></text>
+</g>
+<g >
+<title>fwnode_full_name_string (219,697 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1571.9" y="309" width="0.9" height="15.0" fill="rgb(232,124,29)" rx="2" ry="2" />
+<text  x="1574.86" y="319.5" ></text>
+</g>
+<g >
+<title>map_id_range_up (172,656 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1504.3" y="485" width="0.7" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1507.30" y="495.5" ></text>
+</g>
+<g >
+<title>kernfs_find_ns (40,463 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1548.7" y="421" width="0.2" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1551.70" y="431.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (48,412 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1580.6" y="373" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1583.56" y="383.5" ></text>
+</g>
+<g >
+<title>process_one_work (318,055 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="322.6" y="661" width="1.3" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="325.57" y="671.5" ></text>
+</g>
+<g >
+<title>simple_statfs (24,531 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1497.6" y="469" width="0.1" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="1500.65" y="479.5" ></text>
+</g>
+<g >
+<title>try_to_wake_up (27,388 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="325" width="0.1" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="324.20" y="335.5" ></text>
+</g>
+<g >
+<title>_raw_spin_lock (51,250 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1562.1" y="485" width="0.2" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1565.07" y="495.5" ></text>
+</g>
+<g >
+<title>refill_obj_stock (62,615 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1482.1" y="421" width="0.2" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1485.06" y="431.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq (74,685 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="973.7" y="613" width="0.3" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="976.72" y="623.5" ></text>
+</g>
+<g >
+<title>idle [0] (79,980,250 instructions (user code and WFI: time x 1.8/ns), 20.86%)</title><rect x="324.1" y="693" width="329.6" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="327.07" y="703.5" >idle [0]</text>
+</g>
+<g >
+<title>kmem_cache_free (77,170 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1481.6" y="469" width="0.3" height="15.0" fill="rgb(254,225,53)" rx="2" ry="2" />
+<text  x="1484.61" y="479.5" ></text>
+</g>
+<g >
+<title>ret_to_user (26,955 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1334.4" y="645" width="0.1" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<text  x="1337.36" y="655.5" ></text>
+</g>
+<g >
+<title>rtt-console [127] (user code) (68,805 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="974.2" y="677" width="0.3" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="977.19" y="687.5" ></text>
+</g>
+<g >
+<title>bio_put (24,586 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1323.7" y="133" width="0.1" height="15.0" fill="rgb(242,173,41)" rx="2" ry="2" />
+<text  x="1326.67" y="143.5" ></text>
+</g>
+<g >
+<title>link_path_walk (419,271 instructions (user code and WFI: time x 1.8/ns), 0.11%)</title><rect x="1530.8" y="485" width="1.8" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1533.83" y="495.5" ></text>
+</g>
+<g >
+<title>vectors (75,255 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="973.7" y="629" width="0.3" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="976.72" y="639.5" ></text>
+</g>
+<g >
+<title>__arch_copy_to_user (676,807 instructions (user code and WFI: time x 1.8/ns), 0.18%)</title><rect x="1326.5" y="421" width="2.8" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1329.49" y="431.5" ></text>
+</g>
+<g >
+<title>fwnode_count_parents (45,291 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1571.9" y="293" width="0.2" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="1574.90" y="303.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_read (1,496,347 instructions (user code and WFI: time x 1.8/ns), 0.39%)</title><rect x="1569.3" y="549" width="6.2" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1572.33" y="559.5" ></text>
+</g>
+<g >
+<title>number (25,760 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1532.5" y="389" width="0.1" height="15.0" fill="rgb(221,73,17)" rx="2" ry="2" />
+<text  x="1535.45" y="399.5" ></text>
+</g>
+<g >
+<title>inode_permission (35,072 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1533.0" y="469" width="0.1" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1536.00" y="479.5" ></text>
+</g>
+<g >
+<title>el0_svc (77,668 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="613" width="0.3" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1326.61" y="623.5" ></text>
+</g>
+<g >
+<title>do_interrupt_handler (116,517 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="321.0" y="565" width="0.4" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="323.95" y="575.5" ></text>
+</g>
+<g >
+<title>__legitimize_path (154,231 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1536.4" y="437" width="0.7" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="1539.44" y="447.5" ></text>
+</g>
+<g >
+<title>generic_handle_domain_irq (41,487 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="517" width="0.2" height="15.0" fill="rgb(254,229,54)" rx="2" ry="2" />
+<text  x="976.73" y="527.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_read (76,987 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="549" width="0.3" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1326.61" y="559.5" ></text>
+</g>
+<g >
+<title>arch_cpu_idle (79,941,681 instructions (user code and WFI: time x 1.8/ns), 20.85%)</title><rect x="324.1" y="629" width="329.4" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="327.08" y="639.5" >arch_cpu_idle</text>
+</g>
+<g >
+<title>blk_mq_dispatch_rq_list (63,386 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="261" width="0.3" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1326.63" y="271.5" ></text>
+</g>
+<g >
+<title>__update_cpu_freelist_fast (163,904 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1488.5" y="485" width="0.7" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1491.48" y="495.5" ></text>
+</g>
+<g >
+<title>of_modalias (188,545 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1573.2" y="357" width="0.8" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="1576.24" y="367.5" ></text>
+</g>
+<g >
+<title>submit_bio_noacct_nocheck (35,942 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.5" y="309" width="0.2" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="1336.51" y="319.5" ></text>
+</g>
+<g >
+<title>block_read_full_folio (294,614 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1332.2" y="341" width="1.3" height="15.0" fill="rgb(253,222,53)" rx="2" ry="2" />
+<text  x="1335.24" y="351.5" ></text>
+</g>
+<g >
+<title>walk_component (1,991,225 instructions (user code and WFI: time x 1.8/ns), 0.52%)</title><rect x="1547.2" y="469" width="8.2" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="1550.23" y="479.5" ></text>
+</g>
+<g >
+<title>alloc_inode (113,302 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1580.4" y="405" width="0.5" height="15.0" fill="rgb(216,55,13)" rx="2" ry="2" />
+<text  x="1583.43" y="415.5" ></text>
+</g>
+<g >
+<title>path_put (50,720 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.9" y="517" width="0.2" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="1495.85" y="527.5" ></text>
+</g>
+<g >
+<title>lockref_put_return (81,952 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1481.0" y="485" width="0.3" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1483.96" y="495.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (57,600 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1494.7" y="373" width="0.3" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1497.74" y="383.5" ></text>
+</g>
+<g >
+<title>wake_up_process (27,622 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="341" width="0.1" height="15.0" fill="rgb(213,37,8)" rx="2" ry="2" />
+<text  x="324.19" y="351.5" ></text>
+</g>
+<g >
+<title>path_lookupat (532,682 instructions (user code and WFI: time x 1.8/ns), 0.14%)</title><rect x="1493.2" y="485" width="2.2" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1496.23" y="495.5" ></text>
+</g>
+<g >
+<title>blk_mq_dispatch_list (352,967 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.6" y="325" width="1.5" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1333.64" y="335.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (46,240 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1570.3" y="437" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1573.30" y="447.5" ></text>
+</g>
+<g >
+<title>generic_fillattr (60,952 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1586.0" y="485" width="0.3" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1589.01" y="495.5" ></text>
+</g>
+<g >
+<title>el0_svc_common.constprop.0 (2,371,449 instructions (user code and WFI: time x 1.8/ns), 0.62%)</title><rect x="1324.6" y="581" width="9.8" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1327.59" y="591.5" ></text>
+</g>
+<g >
+<title>try_to_unlazy (46,880 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1577.4" y="469" width="0.2" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1580.44" y="479.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (39,688 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1530.3" y="469" width="0.2" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1533.32" y="479.5" ></text>
+</g>
+<g >
+<title>blk_mq_dispatch_list (63,604 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="325" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1326.63" y="335.5" ></text>
+</g>
+<g >
+<title>do_statx_fd (637,590 instructions (user code and WFI: time x 1.8/ns), 0.17%)</title><rect x="1583.6" y="533" width="2.7" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="1586.64" y="543.5" ></text>
+</g>
+<g >
+<title>vectors (24,854 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="653.5" y="629" width="0.1" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="656.55" y="639.5" ></text>
+</g>
+<g >
+<title>arch_cpu_idle (77,633,906 instructions (user code and WFI: time x 1.8/ns), 20.25%)</title><rect x="653.8" y="629" width="319.9" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="656.75" y="639.5" >arch_cpu_idle</text>
+</g>
+<g >
+<title>filemap_read (2,090,082 instructions (user code and WFI: time x 1.8/ns), 0.55%)</title><rect x="1325.7" y="469" width="8.6" height="15.0" fill="rgb(246,192,46)" rx="2" ry="2" />
+<text  x="1328.66" y="479.5" ></text>
+</g>
+<g >
+<title>try_to_unlazy (276,414 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1536.2" y="453" width="1.1" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1539.16" y="463.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (41,000 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1527.9" y="421" width="0.1" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1530.87" y="431.5" ></text>
+</g>
+<g >
+<title>page_cache_ra_order (39,425 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.7" y="421" width="0.2" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1336.71" y="431.5" ></text>
+</g>
+<g >
+<title>el0_svc (28,407,362 instructions (user code and WFI: time x 1.8/ns), 7.41%)</title><rect x="1469.2" y="613" width="117.1" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1472.20" y="623.5" >el0_svc</text>
+</g>
+<g >
+<title>handle_softirqs (29,685 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.6" y="469" width="0.1" height="15.0" fill="rgb(238,156,37)" rx="2" ry="2" />
+<text  x="324.55" y="479.5" ></text>
+</g>
+<g >
+<title>__mutex_init (35,875 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1520.3" y="453" width="0.1" height="15.0" fill="rgb(219,64,15)" rx="2" ry="2" />
+<text  x="1523.26" y="463.5" ></text>
+</g>
+<g >
+<title>do_el0_svc (77,056 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.6" y="597" width="0.3" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="1326.61" y="607.5" ></text>
+</g>
+<g >
+<title>from_kuid_munged (219,744 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1504.1" y="501" width="0.9" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1507.11" y="511.5" ></text>
+</g>
+<g >
+<title>blk_update_request (32,359 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="322.7" y="597" width="0.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="325.67" y="607.5" ></text>
+</g>
+<g >
+<title>__hrtimer_run_queues (53,271 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1324.0" y="453" width="0.2" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="1326.95" y="463.5" ></text>
+</g>
+<g >
+<title>lockref_put_return (79,376 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1530.5" y="469" width="0.3" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1533.48" y="479.5" ></text>
+</g>
+<g >
+<title>__submit_bio (34,492 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.5" y="293" width="0.2" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1336.51" y="303.5" ></text>
+</g>
+<g >
+<title>vsnprintf (289,422 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1574.2" y="373" width="1.2" height="15.0" fill="rgb(240,164,39)" rx="2" ry="2" />
+<text  x="1577.21" y="383.5" ></text>
+</g>
+<g >
+<title>__memcg_slab_post_alloc_hook (99,597 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1549.3" y="357" width="0.4" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1552.26" y="367.5" ></text>
+</g>
+<g >
+<title>xas_store (38,786 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.2" y="357" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1333.21" y="367.5" ></text>
+</g>
+<g >
+<title>fd_statfs (274,170 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1496.9" y="517" width="1.1" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="1499.86" y="527.5" ></text>
+</g>
+<g >
+<title>ext4_readahead (382,103 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="1332.1" y="373" width="1.6" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="1335.10" y="383.5" ></text>
+</g>
+<g >
+<title>__arm64_sys_readlinkat (1,934,035 instructions (user code and WFI: time x 1.8/ns), 0.50%)</title><rect x="1575.5" y="549" width="8.0" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1578.50" y="559.5" ></text>
+</g>
+<g >
+<title>legitimize_links (38,057 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1537.1" y="437" width="0.2" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="1540.14" y="447.5" ></text>
+</g>
+<g >
+<title>__kernfs_iattrs (56,368 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1510.7" y="453" width="0.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1513.66" y="463.5" ></text>
+</g>
+<g >
+<title>proc_self_get_link (91,040 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1532.2" y="437" width="0.4" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1535.18" y="447.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (151,584 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1549.2" y="373" width="0.6" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1552.20" y="383.5" ></text>
+</g>
+<g >
+<title>strncpy_from_user (239,310 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1565.7" y="485" width="1.0" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1568.75" y="495.5" ></text>
+</g>
+<g >
+<title>d_lru_add (25,994 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1480.8" y="485" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
+<text  x="1483.85" y="495.5" ></text>
+</g>
+<g >
+<title>pointer (278,269 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1571.8" y="341" width="1.1" height="15.0" fill="rgb(245,188,44)" rx="2" ry="2" />
+<text  x="1574.78" y="351.5" ></text>
+</g>
+<g >
+<title>__queue_work (33,472 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="373" width="0.1" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="324.17" y="383.5" ></text>
+</g>
+<g >
+<title>__rcu_read_unlock (40,976 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1486.0" y="469" width="0.1" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1488.97" y="479.5" ></text>
+</g>
+<g >
+<title>set_root (46,458 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1546.4" y="437" width="0.2" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1549.37" y="447.5" ></text>
+</g>
+<g >
+<title>blk_mq_dispatch_rq_list (314,841 instructions (user code and WFI: time x 1.8/ns), 0.08%)</title><rect x="1330.7" y="261" width="1.3" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1333.72" y="271.5" ></text>
+</g>
+<g >
+<title>handle_percpu_devid_irq (62,277 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="501" width="0.3" height="15.0" fill="rgb(206,6,1)" rx="2" ry="2" />
+<text  x="1326.95" y="511.5" ></text>
+</g>
+<g >
+<title>submit_bio_noacct (37,142 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.5" y="325" width="0.2" height="15.0" fill="rgb(211,30,7)" rx="2" ry="2" />
+<text  x="1336.50" y="335.5" ></text>
+</g>
+<g >
+<title>try_charge_memcg (27,972 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1527.0" y="421" width="0.1" height="15.0" fill="rgb(210,27,6)" rx="2" ry="2" />
+<text  x="1530.00" y="431.5" ></text>
+</g>
+<g >
+<title>path_put (61,196 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1581.7" y="517" width="0.2" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="1584.65" y="527.5" ></text>
+</g>
+<g >
+<title>el0t_64_sync_handler (28,748,621 instructions (user code and WFI: time x 1.8/ns), 7.50%)</title><rect x="1467.8" y="629" width="118.5" height="15.0" fill="rgb(211,32,7)" rx="2" ry="2" />
+<text  x="1470.79" y="639.5" >el0t_64_sync_h..</text>
+</g>
+<g >
+<title>path_lookupat (1,375,163 instructions (user code and WFI: time x 1.8/ns), 0.36%)</title><rect x="1575.7" y="501" width="5.7" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1578.71" y="511.5" ></text>
+</g>
+<g >
+<title>generic_permission (53,262 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1541.5" y="421" width="0.2" height="15.0" fill="rgb(228,107,25)" rx="2" ry="2" />
+<text  x="1544.51" y="431.5" ></text>
+</g>
+<g >
+<title>from_kuid_munged (44,912 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1585.2" y="501" width="0.2" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="1588.24" y="511.5" ></text>
+</g>
+<g >
+<title>invoke_syscall.constprop.0 (2,358,479 instructions (user code and WFI: time x 1.8/ns), 0.62%)</title><rect x="1324.6" y="565" width="9.8" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1327.64" y="575.5" ></text>
+</g>
+<g >
+<title>read_pages (24,581 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1333.8" y="405" width="0.1" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="1336.77" y="415.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_lru_noprof (57,290 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1579.9" y="421" width="0.2" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1582.91" y="431.5" ></text>
+</g>
+<g >
+<title>el0t_64_irq_handler (74,332 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1323.9" y="629" width="0.3" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1326.93" y="639.5" ></text>
+</g>
+<g >
+<title>do_idle (77,747,043 instructions (user code and WFI: time x 1.8/ns), 20.28%)</title><rect x="653.7" y="661" width="320.5" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="656.75" y="671.5" >do_idle</text>
+</g>
+<g >
+<title>obj_cgroup_charge_account (592,355 instructions (user code and WFI: time x 1.8/ns), 0.15%)</title><rect x="1524.7" y="437" width="2.4" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="1527.67" y="447.5" ></text>
+</g>
+<g >
+<title>page_cache_async_ra (874,788 instructions (user code and WFI: time x 1.8/ns), 0.23%)</title><rect x="1330.1" y="421" width="3.6" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="1333.07" y="431.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq_handler (24,448 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="653.5" y="597" width="0.1" height="15.0" fill="rgb(213,36,8)" rx="2" ry="2" />
+<text  x="656.55" y="607.5" ></text>
+</g>
+<g >
+<title>format_decode (40,172 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1574.5" y="357" width="0.2" height="15.0" fill="rgb(253,225,53)" rx="2" ry="2" />
+<text  x="1577.54" y="367.5" ></text>
+</g>
+<g >
+<title>kernfs_refresh_inode (151,412 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1510.3" y="469" width="0.7" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="1513.34" y="479.5" ></text>
+</g>
+<g >
+<title>mmc_start_request (35,545 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1330.9" y="213" width="0.1" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="1333.87" y="223.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_complete_rq (51,365 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1323.6" y="197" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1326.63" y="207.5" ></text>
+</g>
+<g >
+<title>arch_timer_handler_phys (37,825 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="469" width="0.2" height="15.0" fill="rgb(216,50,12)" rx="2" ry="2" />
+<text  x="976.74" y="479.5" ></text>
+</g>
+<g >
+<title>blk_finish_plug (355,129 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.6" y="373" width="1.5" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="1333.63" y="383.5" ></text>
+</g>
+<g >
+<title>generic_fillattr (253,656 instructions (user code and WFI: time x 1.8/ns), 0.07%)</title><rect x="1509.3" y="469" width="1.0" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1512.29" y="479.5" ></text>
+</g>
+<g >
+<title>d_lru_add (25,360 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1492.9" y="485" width="0.1" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
+<text  x="1495.90" y="495.5" ></text>
+</g>
+<g >
+<title>pointer (53,724 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1573.7" y="309" width="0.2" height="15.0" fill="rgb(245,188,44)" rx="2" ry="2" />
+<text  x="1576.68" y="319.5" ></text>
+</g>
+<g >
+<title>security_file_alloc (92,250 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1520.4" y="453" width="0.4" height="15.0" fill="rgb(233,133,31)" rx="2" ry="2" />
+<text  x="1523.41" y="463.5" ></text>
+</g>
+<g >
+<title>__irq_exit_rcu (44,249 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.5" y="549" width="0.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="324.54" y="559.5" ></text>
+</g>
+<g >
+<title>lookup_fast (326,437 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1577.7" y="453" width="1.4" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1580.74" y="463.5" ></text>
+</g>
+<g >
+<title>kmem_cache_alloc_noprof (60,609 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1332.5" y="261" width="0.3" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="1335.53" y="271.5" ></text>
+</g>
+<g >
+<title>uevent_show (1,185,014 instructions (user code and WFI: time x 1.8/ns), 0.31%)</title><rect x="1570.5" y="421" width="4.9" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1573.52" y="431.5" ></text>
+</g>
+<g >
+<title>errseq_sample (40,992 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1557.7" y="453" width="0.2" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="1560.73" y="463.5" ></text>
+</g>
+<g >
+<title>kernfs_unlink_open_file (35,520 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1481.4" y="485" width="0.1" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1484.38" y="495.5" ></text>
+</g>
+<g >
+<title>iommu_dma_sync_sg_for_cpu (145,570 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="323.3" y="565" width="0.6" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="326.28" y="575.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (25,610 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1490.9" y="469" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1493.87" y="479.5" ></text>
+</g>
+<g >
+<title>kernfs_fop_readdir (53,248 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1498.0" y="517" width="0.2" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1501.00" y="527.5" ></text>
+</g>
+<g >
+<title>add_uevent_var (35,290 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1570.9" y="389" width="0.1" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1573.88" y="399.5" ></text>
+</g>
+<g >
+<title>atime_needs_update (24,640 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1555.5" y="469" width="0.1" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="1558.55" y="479.5" ></text>
+</g>
+<g >
+<title>filemap_readahead.isra.0 (875,744 instructions (user code and WFI: time x 1.8/ns), 0.23%)</title><rect x="1330.1" y="437" width="3.6" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="1333.07" y="447.5" ></text>
+</g>
+<g >
+<title>of_device_uevent_modalias (210,305 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="1573.1" y="373" width="0.9" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="1576.15" y="383.5" ></text>
+</g>
+<g >
+<title>blk_mq_sched_dispatch_requests (335,019 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.7" y="293" width="1.4" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1333.68" y="303.5" ></text>
+</g>
+<g >
+<title>do_idle (148,564 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="321.9" y="677" width="0.7" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="324.95" y="687.5" ></text>
+</g>
+<g >
+<title>lookup_fast (100,192 instructions (user code and WFI: time x 1.8/ns), 0.03%)</title><rect x="1532.6" y="485" width="0.4" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="1535.56" y="495.5" ></text>
+</g>
+<g >
+<title>kernfs_iop_permission (582,923 instructions (user code and WFI: time x 1.8/ns), 0.15%)</title><rect x="1540.2" y="437" width="2.4" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1543.15" y="447.5" ></text>
+</g>
+<g >
+<title>__account_obj_stock (31,200 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1570.0" y="405" width="0.1" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1572.95" y="415.5" ></text>
+</g>
+<g >
+<title>submit_bh_wbc (157,896 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1332.8" y="325" width="0.6" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1335.79" y="335.5" ></text>
+</g>
+<g >
+<title>blk_mq_flush_plug_list (353,799 instructions (user code and WFI: time x 1.8/ns), 0.09%)</title><rect x="1330.6" y="341" width="1.5" height="15.0" fill="rgb(215,46,11)" rx="2" ry="2" />
+<text  x="1333.64" y="351.5" ></text>
+</g>
+<g >
+<title>down_read (62,192 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1576.7" y="437" width="0.3" height="15.0" fill="rgb(246,188,45)" rx="2" ry="2" />
+<text  x="1579.72" y="447.5" ></text>
+</g>
+<g >
+<title>el1_interrupt (73,982 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="973.7" y="581" width="0.3" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="976.72" y="591.5" ></text>
+</g>
+<g >
+<title>__rcu_read_lock (25,610 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1485.9" y="469" width="0.1" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="1488.86" y="479.5" ></text>
+</g>
+<g >
+<title>step_into (25,680 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1581.3" y="469" width="0.1" height="15.0" fill="rgb(226,98,23)" rx="2" ry="2" />
+<text  x="1584.27" y="479.5" ></text>
+</g>
+<g >
+<title>idle [0] (75,839,020 instructions (user code and WFI: time x 1.8/ns), 19.78%)</title><rect x="10.0" y="693" width="312.6" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="13.00" y="703.5" >idle [0]</text>
+</g>
+<g >
+<title>worker_thread (365,549 instructions (user code and WFI: time x 1.8/ns), 0.10%)</title><rect x="322.6" y="677" width="1.5" height="15.0" fill="rgb(214,45,10)" rx="2" ry="2" />
+<text  x="325.56" y="687.5" ></text>
+</g>
+<g >
+<title>strcmp (29,875 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1578.9" y="421" width="0.1" height="15.0" fill="rgb(217,58,13)" rx="2" ry="2" />
+<text  x="1581.86" y="431.5" ></text>
+</g>
+<g >
+<title>getname_flags (1,033,685 instructions (user code and WFI: time x 1.8/ns), 0.27%)</title><rect x="1562.5" y="517" width="4.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1565.47" y="527.5" ></text>
+</g>
+<g >
+<title>handle_percpu_devid_irq (39,226 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="485" width="0.2" height="15.0" fill="rgb(206,6,1)" rx="2" ry="2" />
+<text  x="976.74" y="495.5" ></text>
+</g>
+<g >
+<title>map_id_range_up (35,288 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1585.1" y="485" width="0.1" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1588.09" y="495.5" ></text>
+</g>
+<g >
+<title>__pi_memset_generic (55,338 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1585.7" y="501" width="0.2" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1588.68" y="511.5" ></text>
+</g>
+<g >
+<title>__legitimize_path (227,843 instructions (user code and WFI: time x 1.8/ns), 0.06%)</title><rect x="1543.1" y="437" width="1.0" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="1546.12" y="447.5" ></text>
+</g>
+<g >
+<title>obj_cgroup_uncharge_pages (75,887 instructions (user code and WFI: time x 1.8/ns), 0.02%)</title><rect x="1488.2" y="453" width="0.3" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="1491.17" y="463.5" ></text>
+</g>
+<g >
+<title>el1_interrupt (188,421 instructions (user code and WFI: time x 1.8/ns), 0.05%)</title><rect x="320.9" y="581" width="0.8" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="323.95" y="591.5" ></text>
+</g>
+<g >
+<title>kernfs_fop_open (154,086 instructions (user code and WFI: time x 1.8/ns), 0.04%)</title><rect x="1557.9" y="453" width="0.7" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="1560.93" y="463.5" ></text>
+</g>
+<g >
+<title>gic_handle_irq (41,924 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="973.7" y="533" width="0.2" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="976.72" y="543.5" ></text>
+</g>
+<g >
+<title>el1h_64_irq (24,644 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="653.5" y="613" width="0.1" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="656.55" y="623.5" ></text>
+</g>
+<g >
+<title>mmc_blk_mq_req_done (36,694 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="321.2" y="405" width="0.1" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="324.16" y="415.5" ></text>
+</g>
+<g >
+<title>iommu_map_nosync (48,386 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1331.8" y="117" width="0.2" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1334.77" y="127.5" ></text>
+</g>
+<g >
+<title>_raw_spin_unlock (46,107 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="1476.6" y="517" width="0.1" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1479.55" y="527.5" ></text>
+</g>
+<g >
+<title>__iommu_unmap (51,618 instructions (user code and WFI: time x 1.8/ns), 0.01%)</title><rect x="323.1" y="533" width="0.2" height="15.0" fill="rgb(242,172,41)" rx="2" ry="2" />
+<text  x="326.06" y="543.5" ></text>
+</g>
+</g>
+</svg>
