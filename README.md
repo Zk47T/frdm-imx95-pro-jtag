@@ -9,6 +9,7 @@ A local git repository (2026-10-16); its history starts with the import from elb
 
 | | | |
 |---|---|---|
+| **OpenOCD config for others** | [`openocd/`](openocd/README.md): `target/imx95.cfg` (any probe), `interface/ch347.cfg`, `board/nxp_frdm-imx95-pro.cfg`, in OpenOCD's own layout; six A55s (SMP), M7, M33; tested over JTAG and SWD with gdb | [openocd/](openocd/README.md) `[V]` |
 | JTAG | works: 0 Ω links fitted on R104/R125/R132/R135; clean to 15 MHz; **debug open in serial download**, no mailbox needed | [01](docs/01-jtag-bringup.md) `[V]` |
 | A55 | halted and resumed in U-Boot; debug base `0x80810000`; PC sampling (PMPCSR) while running | [01](docs/01-jtag-bringup.md), [02](docs/02-linux-without-a-console.md) `[V]` |
 | Reset from afar | MDM-AP `JTAG_SW_RST` (full SoC reset) or the SM monitor `reset` | [01](docs/01-jtag-bringup.md) §5 `[V]` |
@@ -32,6 +33,7 @@ A local git repository (2026-10-16); its history starts with the import from elb
 
 | | |
 |---|---|
+| [OpenOCD config](openocd/README.md) | the i.MX 95 target, the CH347 interface and the FRDM-IMX95-PRO board files for stock OpenOCD, step by step |
 | [01 JTAG bring-up](docs/01-jtag-bringup.md) | rework, link, debug port, A55 base, halt, the APB-AP trap, resets |
 | [02 Linux without a console](docs/02-linux-without-a-console.md) | boot from RAM, shell over JTAG, dmesg and PC sampling from outside, UART map, the SM monitor |
 | [03 DSI and the I2C fault](docs/03-dsi-and-the-i2c-fault.md) | the probe chain, 17 checks, the correction, meter checks, workarounds |

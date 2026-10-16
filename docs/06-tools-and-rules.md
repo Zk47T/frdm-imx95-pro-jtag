@@ -4,6 +4,7 @@
 
 | File | What it does |
 |---|---|
+| `openocd/` | stand-alone OpenOCD files for others: `target/imx95.cfg`, `interface/ch347.cfg`, `board/nxp_frdm-imx95-pro.cfg` ([README](../openocd/README.md)) |
 | `ocd.sh STAGE` | one OpenOCD run per stage: `scan`, `dp`, `dm`, `dm-reset`, `dac`, `a55`, `server`, `mdm`, `pcs`, `etm-ids`, `trace CORE BASE SIZE MS`, `trace-all BASE SIZE MS [CONFIGR]`, `read BASE SIZE FILE` (SWD, 276 KiB/s), `ktext` (the live kernel text); `JTAG_KHZ=`, `SWD=1`, `DBG0=`; logs in `logs/` |
 | `imx95-pro.cfg` | the DAP, and with `IMX95_A55` the AHB-AP/APB-AP memory targets, six A55s (SMP, hwthread), the M7 and the M33; A55 debug base `0x80810000` |
 | `imx95-jtag.tcl` | IDCODEs, DP state, the debug mailbox (allow-listed commands only), MDM-AP, PC sampling, `etm_ids`, `cs_trace_start` / `cs_trace_stop`, `cs_multi_start` / `cs_multi_stop` (all cores; the stop is at the sink) |
