@@ -10,7 +10,7 @@
 #   ocd.sh server [dm]       the same targets, left running for gdb on :3333
 #   ocd.sh mdm [N]           after authentication: MDM-AP status, then N samples of each A55's WFI
 #   ocd.sh pcs [CORE] [N]    after authentication: N samples of an A55's PC without halting it
-# DBG0=0x80810000 ocd.sh ... the A55 debug base, if 'dap info 1' shows it there
+# DBG0=0x... ocd.sh ...      another A55 debug base (default 0x80810000, measured 2026-10-16)
 # SWD=1 ocd.sh ...           SWD instead of JTAG (SWDIO = TMS, SWCLK = TCK; TDO is then free
 #                            for SWO). Not for 'scan'.
 # JTAG_KHZ=1875 ocd.sh ...   another JTAG clock (469 kHz without it); only one that
@@ -56,7 +56,9 @@ dm-reset)
 dac)
 	ocd "${DAP[@]}" -c "dm_dac $([ "$2" = reset ] && echo 1 || echo 0)" -c shutdown ;;
 a55)
-	ocd "${A55[@]}" -c "$(session "$2")" -c 'imx95.dap info 0' -c 'imx95.dap info 1' \
+	# no 'dap info 1': its walk reads every core's debug block, and a read of a powered-off
+	# one never completes and wedges the APB-AP until a power cycle (2026-10-16)
+	ocd "${A55[@]}" -c "$(session "$2")" -c 'imx95.dap info 0' \
 	    -c 'imx95.a55.0 arp_examine' -c imx95_fast -c halt -c 'reg pc' -c 'reg cpsr' -c resume -c shutdown ;;
 server)
 	ocd "${A55[@]}" -c "$(session "$2")" -c 'imx95.a55.0 arp_examine' -c 'imx95.ahb arp_examine' -c imx95_fast ;;

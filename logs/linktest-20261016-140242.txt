@@ -1,0 +1,13 @@
+     kHz BYPASS bits    errors     0->1     1->0   IDCODE bad  error bit positions
+     469       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477
+     938       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477
+    1875       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477
+    3750       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477
+    7500       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477
+   15000       9600         0        0        0        0/300   
+         IDCODE read most often: 0x0ba03477

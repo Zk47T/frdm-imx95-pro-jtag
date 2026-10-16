@@ -1,0 +1,16 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-09-30-12:07)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+Info : CH347 SWD mode enabled
+adapter speed: 1000 kHz
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 1000 kHz
+Error: Error connecting DP: cannot read IDR
+
+1
+/home/zk47/Project/5.elb1-t113/16.frdm-imx95-pro-jtag/imx95-jtag.tcl:18: Error: 
+Traceback (most recent call last):
+  File "/home/zk47/Project/5.elb1-t113/16.frdm-imx95-pro-jtag/imx95-jtag.tcl", line 18, in imx95_ids
+    {imx95.dap dpreg} 0x0

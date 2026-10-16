@@ -1,0 +1,37 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-09-30-12:07)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+adapter speed: 469 kHz
+adapter speed: 3750 kHz
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 3750 kHz
+Info : JTAG tap: imx95.cpu tap/device found: 0x9893801d (mfg: 0x00e (Freescale (Motorola)), part: 0x8938, ver: 0x9)
+Warn : gdb services need one or more targets defined
+0
+Error: Timeout during WAIT recovery
+Error: JTAG-DP STICKY ERROR
+AP # 0x1
+		AP ID register 0x54770002
+		Type is MEM-AP APB2 or APB3
+MEM-AP BASE 0x80000003
+		Valid ROM table present
+		Component base address 0x80000000
+		Peripheral ID 0x000018e893
+		Designer is 0x00e, Freescale (Motorola)
+		Part is 0x893, Unrecognized 
+		Component class is 0x1, ROM table
+		MEMTYPE system memory not present: dedicated debug bus
+	ROMTABLE[0x0] = 0x00800003
+		Component base address 0x80800000
+		Can't read component, the corresponding core might be turned off
+AP # 0x0
+		AP ID register 0x84770001
+		Type is MEM-AP AHB3
+MEM-AP BASE 0x00000002
+		No ROM table present
+MDMSTATUS 0x600013c4: M33 halted 0, sleeping 0, deep 0; M7 halted 0, sleeping 0, deep 0; system reset 1
+MDMSTATUS2 0x00003f00: A55 cores (bit n = core n) in debug 0x00, in WFI 0x3f, in WFE 0x00
+0
+shutdown command invoked
