@@ -1,0 +1,25 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-10-15-16:13)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+adapter speed: 469 kHz
+adapter speed: 15000 kHz
+1
+Info : [imx95.a55.0] Hardware thread awareness created
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 15000 kHz
+Info : JTAG tap: imx95.cpu tap/device found: 0x9893801d (mfg: 0x00e (Freescale (Motorola)), part: 0x8938, ver: 0x9)
+Info : [imx95.ahb] gdb port disabled
+Info : [imx95.apb] gdb port disabled
+Info : [imx95.a55.0] gdb port disabled
+Info : [imx95.a55.1] gdb port disabled
+Info : [imx95.a55.2] gdb port disabled
+Info : [imx95.a55.3] gdb port disabled
+Info : [imx95.a55.4] gdb port disabled
+Info : [imx95.a55.5] gdb port disabled
+Info : [imx95.m7] gdb port disabled
+Info : [imx95.m33] gdb port disabled
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+

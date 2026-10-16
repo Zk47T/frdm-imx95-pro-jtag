@@ -1,0 +1,41 @@
+#!/busybox sh
+# /init of the JTAG initramfs: start the JTAG shell, then hand over to the eMMC root's own
+# init (ui-init -> the cluster -> systemd), so the board boots as it always does, with a shell
+# beside it that needs no UART and no network.
+#
+# The shell (rtt-console) runs from a tmpfs mounted on the new root's /mnt, so it survives
+# switch_root: its working directory stays that tmpfs, it reaches the kernel through ./proc,
+# ./sys, ./dev, ./cfg (it mounts them there) and the real root through proc/1/root.
+# Nothing here writes to the eMMC.
+cd /
+export PATH=/
+RTT=0xf0000000
+/busybox mkdir -p /dev /proc /sys /newroot
+/busybox mount -t devtmpfs devtmpfs /dev
+/busybox mount -t proc proc /proc
+/busybox mount -t sysfs sysfs /sys
+log() { echo "jtag-init: $*" > /dev/kmsg; }
+log "start; cmdline: $(/busybox cat /proc/cmdline)"
+
+ROOT=$(/busybox sed -n 's/.*root=\([^ ]*\).*/\1/p' /proc/cmdline)
+ROOT=${ROOT:-/dev/mmcblk0p2}
+i=0
+while [ ! -b "$ROOT" ] && [ $i -lt 200 ]; do /busybox usleep 50000; i=$((i + 1)); done
+
+if /busybox mount -o rw "$ROOT" /newroot && [ -d /newroot/mnt ]; then
+	/busybox mount -t tmpfs -o size=64m,mode=755 jtag /newroot/mnt
+	HERE=/newroot/mnt
+else
+	log "no root on $ROOT after $((i * 50)) ms: staying in the initramfs with the shell"
+	/busybox mkdir -p /jtag
+	/busybox mount -t tmpfs -o size=64m,mode=755 jtag /jtag
+	HERE=/jtag
+fi
+/busybox cp /busybox /rtt-console /physwin /jtagsh /jtag-env.sh "$HERE/"
+(cd "$HERE" && exec ./rtt-console $RTT ./jtagsh > /dev/kmsg 2>&1) &
+log "rtt-console pid $! in $HERE, control block at $RTT; root $ROOT after $((i * 50)) ms"
+
+[ "$HERE" = /newroot/mnt ] || while :; do /busybox sleep 3600; done
+/busybox umount /proc /sys
+/busybox mount --move /dev /newroot/dev
+exec /busybox switch_root /newroot /sbin/init

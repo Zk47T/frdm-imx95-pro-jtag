@@ -1,0 +1,3 @@
+board/out/
+logs/*.pid
+__pycache__/

@@ -1,0 +1,15 @@
+#!./busybox sh
+# The shell rtt-console starts (its working directory is the tmpfs). It was started before
+# switch_root, so its own root is the initramfs, emptied by the handover. Wait for PID 1 to
+# be in the real root (its /mnt is this tmpfs), then become a shell there: /dev, /dev/i2c-*,
+# /usr/bin and everything else then work by their usual paths.
+# The working directory stays /mnt: busybox runs its applets as ./busybox.
+i=0
+while [ ! -x proc/1/root/mnt/busybox ] && [ $i -lt 1200 ]; do ./busybox usleep 100000; i=$((i + 1)); done
+if [ -x proc/1/root/mnt/busybox ]; then
+	exec ./busybox env -i HOME=/mnt TERM=vt100 PS1='jtag# ' \
+		PATH=/mnt:/usr/sbin:/usr/bin:/sbin:/bin \
+		./busybox chroot proc/1/root /mnt/busybox sh -c 'cd /mnt && exec /mnt/busybox sh -i'
+fi
+echo "jtagsh: PID 1 never reached the real root; a shell in the initramfs instead"
+exec ./busybox sh -i
