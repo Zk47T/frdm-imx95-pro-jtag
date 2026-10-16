@@ -367,12 +367,11 @@ proc etm_ids {core} {
 	return $out
 }
 
-# Start: ETR circular buffer at base (64-bit physical, its own AXI master: not behind the SMMU,
-# no iommus in the DT) of size bytes; ETF as a hardware FIFO link; then the ETM.
-proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
-	set r $::cs_etr; set f $::cs_etf; set e [etm_base $core]
-	foreach b [list $r $f $e] { cs_w [expr {$b + 0xfb0}] $::cs_lock }
-	# ETR (sink)
+# The sink: the ETR as a circular buffer at base (64-bit physical; its own AXI master, not behind
+# the SMMU, no iommus in the DT) of size bytes, and the ETF as a hardware FIFO link in front of it.
+proc cs_sink_start {base size} {
+	set r $::cs_etr; set f $::cs_etf
+	foreach b [list $r $f] { cs_w [expr {$b + 0xfb0}] $::cs_lock }
 	cs_w [expr {$r + 0x20}] 0
 	cs_wait [expr {$r + 0x0c}] 0x4 0x4
 	cs_w [expr {$r + 0x04}] [expr {$size / 4}]
@@ -389,14 +388,18 @@ proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
 	cs_w [expr {$r + 0x304}] 0x133
 	cs_w [expr {$r + 0x34}] 0
 	cs_w [expr {$r + 0x20}] 1
-	# ETF (link): hardware FIFO
 	cs_w [expr {$f + 0x20}] 0
 	cs_wait [expr {$f + 0x0c}] 0x4 0x4
 	cs_w [expr {$f + 0x28}] 2
 	cs_w [expr {$f + 0x304}] 0x3
 	cs_w [expr {$f + 0x34}] 0
 	cs_w [expr {$f + 0x20}] 1
-	# ETM (source)
+}
+
+# One core's ETM: OS unlock, keep powered, program (nothing excluded: Linux runs at EL2), enable.
+proc cs_etm_start {core traceid {configr 0x0} {ccctlr 0x0}} {
+	set e [etm_base $core]
+	cs_w [expr {$e + 0xfb0}] $::cs_lock
 	cs_w [expr {$e + 0x300}] 0
 	cs_w [expr {$e + 0x310}] [expr {[cs_r [expr {$e + 0x310}]] | 0x8}]
 	cs_w [expr {$e + 0x004}] 0
@@ -416,14 +419,17 @@ proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
 	cs_w [expr {$e + 0x088}] 0
 	cs_w [expr {$e + 0x004}] 1
 	cs_wait [expr {$e + 0x00c}] 0x1 0x0
-	echo [format "cs: tracing core %d, trace id %#x, into %#x + %#x; ETR STS %#x" $core $traceid $base $size [cs_r [expr {$r + 0x0c}]]]
 }
 
-# Stop: the ETM, then flush the ETF and the ETR (stop on flush). Returns the ETR's state.
-proc cs_trace_stop {core} {
-	set r $::cs_etr; set f $::cs_etf; set e [etm_base $core]
+proc cs_etm_stop {core} {
+	set e [etm_base $core]
 	cs_w [expr {$e + 0x004}] 0
 	cs_wait [expr {$e + 0x00c}] 0x1 0x1
+}
+
+# Flush the ETF and the ETR (stop on flush); returns the ETR's state.
+proc cs_sink_stop {} {
+	set r $::cs_etr; set f $::cs_etf
 	cs_w [expr {$f + 0x304}] [expr {[cs_r [expr {$f + 0x304}]] | 0x40}]
 	cs_wait [expr {$f + 0x304}] 0x40 0x0
 	cs_w [expr {$f + 0x20}] 0
@@ -437,4 +443,27 @@ proc cs_trace_stop {core} {
 	set s [format "STS=%#x full=%d memerr=%d RRP=%#x RWP=%#x" $sts [expr {$sts & 1}] [expr {($sts >> 5) & 1}] $rrp $rwp]
 	echo "cs: stopped: $s"
 	return $s
+}
+
+# One core (the original interface).
+proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
+	cs_sink_start $base $size
+	cs_etm_start $core $traceid $configr $ccctlr
+	echo [format "cs: tracing core %d, trace id %#x, into %#x + %#x; ETR STS %#x" $core $traceid $base $size [cs_r [expr {$::cs_etr + 0x0c}]]]
+}
+proc cs_trace_stop {core} {
+	cs_etm_stop $core
+	return [cs_sink_stop]
+}
+
+# Several cores into the same buffer: core n gets trace id 0x10 + n (the funnels merge them).
+# The cores must be powered (cpuidle.off=1): an ETM access to a powered-off core wedges the APB-AP.
+proc cs_multi_start {cores base size {configr 0x0} {ccctlr 0x0}} {
+	cs_sink_start $base $size
+	foreach c $cores { cs_etm_start $c [expr {0x10 + $c}] $configr $ccctlr }
+	echo [format "cs: tracing cores {%s} (trace ids 0x10 + core) into %#x + %#x" $cores $base $size]
+}
+proc cs_multi_stop {cores} {
+	foreach c $cores { cs_etm_stop $c }
+	return [cs_sink_stop]
 }

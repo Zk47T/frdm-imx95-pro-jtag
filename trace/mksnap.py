@@ -57,8 +57,10 @@ def main():
     ap.add_argument('--configr', type=lambda s: int(s, 0), default=0)
     ap.add_argument('--traceid', type=lambda s: int(s, 0), default=0x10)
     ap.add_argument('--elf', action='append', default=[])
+    ap.add_argument('--cores', default='0', help='traced cores, e.g. 0,1,2,3 (trace id 0x10 + core when more than one)')
     ap.add_argument('--out', required=True)
     a = ap.parse_args()
+    cores = [int(c) for c in a.cores.split(',')]
     os.makedirs(a.out, exist_ok=True)
 
     buf = open(a.etr, 'rb').read()
@@ -66,15 +68,19 @@ def main():
     data = buf[off:] + buf[:off] if a.full else buf[:off]
     open(os.path.join(a.out, 'cstrace.bin'), 'wb').write(data)
 
-    ids = dict(re.findall(r'(TRC[A-Z0-9]+)=(0x[0-9a-f]+|0)\b', open(a.log).read().split('etm ')[-1]))
-    regs = {'TRCCONFIGR': a.configr, 'TRCTRACEIDR': a.traceid}
-    for k in ('TRCAUTHSTATUS', 'TRCIDR0', 'TRCIDR1', 'TRCIDR2', 'TRCIDR8', 'TRCIDR9', 'TRCIDR10', 'TRCIDR11',
-              'TRCIDR12', 'TRCIDR13'):
-        regs[k] = int(ids[k], 16) if ids[k] != '0' else 0
-    with open(os.path.join(a.out, 'etm_0.ini'), 'w') as f:
-        f.write('[device]\nname=etm_0\nclass=trace_source\ntype=ETM4\n\n[regs]\n')
-        for k, v in regs.items():
-            f.write('%s=0x%08X\n' % (k, v))
+    # one 'etm N: TRC...=...' line per core in the log (imx95-jtag.tcl etm_ids); the last one wins
+    etm_lines = dict(re.findall(r'etm (\d+): (.*)', open(a.log).read()))
+    for c in cores:
+        ids = dict(re.findall(r'(TRC[A-Z0-9]+)=(0x[0-9a-f]+|0)\b', etm_lines[str(c)]))
+        tid = a.traceid if len(cores) == 1 else 0x10 + c
+        regs = {'TRCCONFIGR': a.configr, 'TRCTRACEIDR': tid}
+        for k in ('TRCAUTHSTATUS', 'TRCIDR0', 'TRCIDR1', 'TRCIDR2', 'TRCIDR8', 'TRCIDR9', 'TRCIDR10', 'TRCIDR11',
+                  'TRCIDR12', 'TRCIDR13'):
+            regs[k] = int(ids[k], 16) if ids[k] != '0' else 0
+        with open(os.path.join(a.out, 'etm_%d.ini' % c), 'w') as f:
+            f.write('[device]\nname=etm_%d\nclass=trace_source\ntype=ETM4\n\n[regs]\n' % c)
+            for k, v in regs.items():
+                f.write('%s=0x%08X\n' % (k, v))
 
     dumps = []
     for elf in [KB + '/vmlinux'] + a.elf:
@@ -83,16 +89,19 @@ def main():
             name = '%s_%d.bin' % (os.path.basename(elf), i)
             open(os.path.join(a.out, name), 'wb').write(raw[o:o + sz])
             dumps.append((name, va, sz))
-    with open(os.path.join(a.out, 'cpu_0.ini'), 'w') as f:
-        f.write('[device]\nname=cpu_0\nclass=core\ntype=Cortex-A55\n\n[regs]\nPC(size:64)=0\n')
-        for i, (name, va, sz) in enumerate(dumps):
-            f.write('\n[dump%d]\nfile=%s\naddress=0x%X\nlength=0x%X\nspace=ANY\n' % (i + 1, name, va, sz))
+    for c in cores:
+        with open(os.path.join(a.out, 'cpu_%d.ini' % c), 'w') as f:
+            f.write('[device]\nname=cpu_%d\nclass=core\ntype=Cortex-A55\n\n[regs]\nPC(size:64)=0\n' % c)
+            for i, (name, va, sz) in enumerate(dumps):
+                f.write('\n[dump%d]\nfile=%s\naddress=0x%X\nlength=0x%X\nspace=ANY\n' % (i + 1, name, va, sz))
+    devs = ''.join('device%d=cpu_%d.ini\ndevice%d=etm_%d.ini\n' % (2 * i, c, 2 * i + 1, c) for i, c in enumerate(cores))
     open(os.path.join(a.out, 'snapshot.ini'), 'w').write(
-        '[snapshot]\nversion=1.0\ndescription=i.MX95 A55 core 0 ETMv4 -> ETF -> ETR, read over JTAG\n\n'
-        '[device_list]\ndevice0=cpu_0.ini\ndevice1=etm_0.ini\n\n[trace]\nmetadata=trace.ini\n')
+        '[snapshot]\nversion=1.0\ndescription=i.MX95 A55 cores %s ETMv4 -> ETF -> ETR, read over JTAG\n\n'
+        '[device_list]\n%s\n[trace]\nmetadata=trace.ini\n' % (a.cores, devs))
     open(os.path.join(a.out, 'trace.ini'), 'w').write(
         '[trace_buffers]\nbuffers=buffer0\n\n[buffer0]\nname=etr_0\nfile=cstrace.bin\nformat=coresight\n\n'
-        '[source_buffers]\netm_0=etr_0\n\n[core_trace_sources]\ncpu_0=etm_0\n')
+        '[source_buffers]\n' + ''.join('etm_%d=etr_0\n' % c for c in cores) +
+        '\n[core_trace_sources]\n' + ''.join('cpu_%d=etm_%d\n' % (c, c) for c in cores))
     print('snapshot in %s: %d bytes of trace (%s), %d memory images' % (
         a.out, len(data), 'rotated at RWP' if a.full else 'not wrapped', len(dumps)))
 
@@ -111,6 +120,8 @@ def main():
     fn = collections.Counter()
     el = collections.Counter()
     total = 0
+    per_id = collections.Counter()
+    sync_id = collections.Counter()
     rng = re.compile(r'INSTR_RANGE\(exec range=0x([0-9a-f]+):\[0x([0-9a-f]+)\] num_i\((\d+)\)')
     ctx = re.compile(r'PE_CONTEXT\(\(ISA=\w+\) (EL\d)(\w)')
     for ln, line in enumerate(proc.stdout):
@@ -121,10 +132,15 @@ def main():
             kinds[m.group(1)] += 1
         if 'OCSD_ERR' in line or 'ERROR' in line.upper() and 'ERR_' in line:
             kinds['error-lines'] += 1
+        idm = re.search(r'ID:([0-9a-f]+);', line)
+        if idm and ('NO_SYNC' in line or 'OVERFLOW' in line.upper()):
+            sync_id[int(idm.group(1), 16)] += 1
         m = rng.search(line)
         if m:
             n = int(m.group(3))
             total += n
+            if idm:
+                per_id[int(idm.group(1), 16)] += n
             fn[name(int(m.group(1), 16))] += n
         m = ctx.search(line)
         if m:
@@ -133,6 +149,9 @@ def main():
     head.close()
     print('decoder elements:', dict(kinds.most_common(12)))
     print('PE contexts seen:', dict(el))
+    if len(cores) > 1:
+        for t in sorted(set(per_id) | set(sync_id)):
+            print('  trace id %#x (core %d): %11d instructions, %4d NO_SYNC/overflow' % (t, t - 0x10, per_id[t], sync_id[t]))
     print('%d instructions decoded; top functions by instructions executed:' % total)
     for n, c in fn.most_common(25):
         print('  %6.2f %%  %s' % (100.0 * c / max(total, 1), n))

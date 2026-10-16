@@ -50,7 +50,7 @@ class Syms:
             if t in 'tTwW':
                 s.append((int(a, 16), n))
         self.elfs = {}
-        ini = open(os.path.join(snap, 'cpu_0.ini')).read()
+        ini = open(sorted(__import__('glob').glob(os.path.join(snap, 'cpu_*.ini')))[0]).read()
         for f in sorted(set(re.findall(r'file=(\S+?)_\d+\.bin', ini))):
             if f == 'vmlinux':
                 continue
@@ -81,26 +81,42 @@ def decode(snap):
     return p
 
 
+class _Src:
+    """the decoder state of one trace source (one core's ETM)"""
+    def __init__(self):
+        self.stack, self.pending, self.icount, self.el, self.cyc = [], K_JUMP, 0, 0, 0
+
+
+IDRE = re.compile(r'ID:([0-9a-f]+);')
+
+
 def cmd_index(a):
+    """Decode once; one call-stack machine per trace ID (core n = trace ID 0x10 + n). An overflow
+    (NO_SYNC/TRACE_ON [overflow]) loses that core's trace for a while: its stack starts again."""
     syms = Syms(a.snap)
     p = decode(a.snap)
-    rows = []          # start, end, n_instr, icount_before, kind, depth, func_idx, el
-    tsl = []           # (icount, timestamp)
-    ccl = []           # (icount, cumulative CPU cycles) at each cycle count (TRCCONFIGR.CCI)
-    cyc = 0
-    stack = []         # function idx per frame; -2 marks an exception boundary
-    icount = 0
-    pending = K_JUMP   # how the previous range ended
-    el = 0
+    rows = []          # start, end, n_instr, icount_before, kind, depth, func_idx, el, core
+    tsl = []           # (core, icount, timestamp)
+    ccl = []           # (core, icount, cumulative CPU cycles) at each cycle count (TRCCONFIGR.CCI)
+    gaps = []          # (core, icount) where trace was lost
+    srcs = {}
     stop_at = a.start + a.count if a.count else None
     for line in p.stdout:
+        idm = IDRE.search(line)
+        if not idm:
+            continue
+        core = int(idm.group(1), 16) - 0x10
+        s = srcs.get(core)
+        if s is None:
+            s = srcs[core] = _Src()
         m = RNG.search(line)
         if m:
             st, en, n = int(m.group(1), 16), int(m.group(2), 16), int(m.group(3))
             f = syms.idx(st)
-            if pending == K_CALL:
+            stack = s.stack
+            if s.pending == K_CALL:
                 stack.append(f)
-            elif pending == K_RET:
+            elif s.pending == K_RET:
                 if stack and stack[-1] != -2:
                     stack.pop()
                 if not stack or stack[-1] == -2:
@@ -111,60 +127,85 @@ def cmd_index(a):
                 stack.append(f)
             elif stack[-1] != f:
                 stack[-1] = f                # jump into another function: a tail call
-            taken, kind, extra = m.group(4), m.group(5), m.group(6)
+            taken, extra = m.group(4), m.group(6)
             if taken == 'E' and 'b+link' in extra:
-                pending = K_CALL
+                s.pending = K_CALL
             elif taken == 'E' and 'ret' in extra:
-                pending = K_RET
+                s.pending = K_RET
             else:
-                pending = K_JUMP
-            if icount >= a.start:
-                rows.append((s64(st), s64(en), n, icount, pending, len(stack), f, el))
-            icount += n
-            if stop_at and icount >= stop_at:
-                p.kill()
+                s.pending = K_JUMP
+            if s.icount >= a.start and (not stop_at or s.icount < stop_at):
+                rows.append((s64(st), s64(en), n, s.icount, s.pending, len(stack), f, s.el, core))
+            s.icount += n
+            if stop_at and len(srcs) == 1 and s.icount >= stop_at:
+                p.kill()                     # one core: stop decoding once the window is full
                 break
             continue
         if EXC.search(line):
-            stack.append(-2)                 # the exception's frames go above this marker
-            pending = K_CALL
+            s.stack.append(-2)               # the exception's frames go above this marker
+            s.pending = K_CALL
             continue
         if ERET.search(line):
-            while stack and stack[-1] != -2:
-                stack.pop()
-            if stack:
-                stack.pop()
-            pending = K_JUMP
+            while s.stack and s.stack[-1] != -2:
+                s.stack.pop()
+            if s.stack:
+                s.stack.pop()
+            s.pending = K_JUMP
+            continue
+        if 'NO_SYNC' in line or 'TRACE_ON' in line:
+            if s.icount:
+                gaps.append((core, s.icount))
+            s.stack, s.pending = [], K_JUMP
             continue
         c = CC.search(line)
         if c:
-            cyc += int(c.group(1))
-            ccl.append((icount, cyc))
+            s.cyc += int(c.group(1))
+            ccl.append((core, s.icount, s.cyc))
         m = TS.search(line)
         if m:
-            tsl.append((icount, int(m.group(1), 16)))
+            tsl.append((core, s.icount, int(m.group(1), 16)))
             continue
         if c:
             continue
         m = CTX.search(line)
         if m:
-            el = int(m.group(1)[2])
+            s.el = int(m.group(1)[2])
     p.wait()
-    r = np.array(rows, dtype=np.int64).reshape(-1, 8) if rows else np.zeros((0, 8), np.int64)
-    np.savez(os.path.join(a.snap, 'index.npz'), rows=r, ts=np.array(tsl, dtype=np.int64).reshape(-1, 2),
-             cc=np.array(ccl, dtype=np.int64).reshape(-1, 2),
+    r = np.array(rows, dtype=np.int64).reshape(-1, 9) if rows else np.zeros((0, 9), np.int64)
+    np.savez(os.path.join(a.snap, 'index.npz'), rows=r, ts=np.array(tsl, dtype=np.int64).reshape(-1, 3),
+             cc=np.array(ccl, dtype=np.int64).reshape(-1, 3), gaps=np.array(gaps, dtype=np.int64).reshape(-1, 2),
              names=np.array(syms.name, dtype=object), start=a.start)
-    print('%d ranges, %d instructions (from #%d), %d timestamps, %d cycle counts, max depth %d -> %s' % (
-        len(r), int(r[:, 2].sum()) if len(r) else 0, a.start, len(tsl), len(ccl), int(r[:, 5].max()) if len(r) else 0,
-        os.path.join(a.snap, 'index.npz')))
+    for core in sorted(srcs):
+        rc = r[r[:, 8] == core]
+        print('core %d: %d ranges, %d instructions, %d timestamps, %d cycle counts, %d gaps, max depth %d' % (
+            core, len(rc), int(rc[:, 2].sum()) if len(rc) else 0, sum(1 for t in tsl if t[0] == core),
+            sum(1 for t in ccl if t[0] == core), sum(1 for g in gaps if g[0] == core),
+            int(rc[:, 5].max()) if len(rc) else 0))
+    print('-> ' + os.path.join(a.snap, 'index.npz'))
+
+def load(snap, gips):
+    """{core: CoreIndex} from SNAP/index.npz (older single-core indexes have no core column)"""
+    z = np.load(os.path.join(snap, 'index.npz'), allow_pickle=True)
+    names = list(z['names'])
+    rows = z['rows']
+    if rows.shape[1] == 8:
+        rows = np.column_stack([rows, np.zeros(len(rows), np.int64)])
+    def per_core(key):
+        if key not in z.files:
+            return np.zeros((0, 3), np.int64)
+        v = z[key]
+        return np.column_stack([np.zeros(len(v), np.int64), v]) if v.shape[1] == 2 else v
+    ts, cc = per_core('ts'), per_core('cc')
+    out = {}
+    for c in sorted(set(int(x) for x in rows[:, 8])):
+        out[c] = CoreIndex(c, rows[rows[:, 8] == c][:, :8], ts[ts[:, 0] == c][:, 1:], cc[cc[:, 0] == c][:, 1:],
+                           names, gips)
+    return out
 
 
-class Index:
-    def __init__(self, snap, gips):
-        z = np.load(os.path.join(snap, 'index.npz'), allow_pickle=True)
-        self.r, self.ts, self.names = z['rows'], z['ts'], list(z['names'])
-        self.gips = gips
-        self.cc = z['cc'] if 'cc' in z.files else np.zeros((0, 2), np.int64)
+class CoreIndex:
+    def __init__(self, core, rows, ts, cc, names, gips):
+        self.core, self.r, self.ts, self.cc, self.names, self.gips = core, rows, ts, cc, names, gips
         self.unit = None
         if len(self.ts) >= 2 and self.ts[-1, 1] > self.ts[0, 1]:
             self.unit = 'ETM timestamps (system counter x 256)'
@@ -194,68 +235,104 @@ class Index:
         return icount / self.gips
 
     def frames(self):
-        """(start_icount, end_icount, depth, func) for every function activation in the window"""
-        open_ = []   # (func, start, depth)
+        """(start_icount, end_icount, depth, func) for every function activation in the window.
+        A frame stays open while deeper rows (its callees) run; it closes when a row is shallower
+        (it returned) or at its own depth with another function (a tail call replaced it). Depth can
+        jump by 2 at an exception (the marker level has no rows), so frames are keyed by depth."""
+        open_ = []   # [func, start_icount, depth], innermost last
         out = []
-        prev_depth = 0
         for st, en, n, ic, kind, depth, f, el in self.r:
-            while len(open_) >= depth:
+            ic, depth, f = int(ic), int(depth), int(f)
+            while open_ and open_[-1][2] > depth:
                 g, s0, d0 = open_.pop()
                 out.append((s0, ic, d0, g))
-            if len(open_) == depth - 1:
-                open_.append((f, ic, depth))
-            elif open_ and open_[-1][0] != f:
+            if open_ and open_[-1][2] == depth and open_[-1][0] != f:
                 g, s0, d0 = open_.pop()
                 out.append((s0, ic, d0, g))
-                open_.append((f, ic, depth))
-            prev_depth = depth
+            if not open_ or open_[-1][2] < depth:
+                open_.append([f, ic, depth])
         end = int(self.r[-1, 3] + self.r[-1, 2]) if len(self.r) else 0
         while open_:
             g, s0, d0 = open_.pop()
             out.append((s0, end, d0, g))
         return out
 
-
 def cmd_perfetto(a):
-    ix = Index(a.snap, a.gips)
-    ev = []
-    for s0, s1, d, f in ix.frames():
-        t0, t1 = ix.t_ns(s0), ix.t_ns(s1)
-        ev.append({'name': ix.name(f), 'ph': 'X', 'ts': t0 / 1000.0, 'dur': max((t1 - t0) / 1000.0, 0.001),
-                   'pid': 1, 'tid': 0, 'args': {'instructions': int(s1 - s0), 'first_instruction': int(s0)}})
-    meta = [{'name': 'process_name', 'ph': 'M', 'pid': 1, 'args': {'name': 'i.MX95 A55 core 0 (ETM)'}},
-            {'name': 'thread_name', 'ph': 'M', 'pid': 1, 'tid': 0,
-             'args': {'name': 'core 0, time: ' + (ix.unit or 'instructions at %.1f GIPS' % a.gips)}}]
+    """Begin/End events in call order, one track (tid) per core. Nesting comes from the order, not
+    from comparing float times (absolute times near 1.8e9 us rounded a parent's end past its
+    tail-called child's start: Perfetto import errors). Times: integer ns from the earliest
+    instruction of any core, so the cores line up on the common system-counter timestamps."""
+    cores = load(a.snap, a.gips)
+    t_base = min(ix.t_ns(int(ix.r[0, 3])) for ix in cores.values() if len(ix.r))
+    out_ev = [{'name': 'process_name', 'ph': 'M', 'pid': 1, 'args': {'name': 'i.MX95 A55 (ETM trace)'}}]
+    nfr = 0
+    # tid = 10 + core: Perfetto maps tid 0 to the process's main thread (tid == pid), which merged
+    # core 0 into core 1's track (misplaced_end_event) when the pid was 1
+    for c, ix in cores.items():
+        tid = 10 + c
+        fr = ix.frames()
+        nfr += len(fr)
+        out_ev.append({'name': 'thread_name', 'ph': 'M', 'pid': 1, 'tid': tid,
+                       'args': {'name': 'core %d (%s)' % (c, ix.unit or 'instructions at %.1f GIPS' % a.gips)}})
+        out_ev.append({'name': 'thread_sort_index', 'ph': 'M', 'pid': 1, 'tid': tid, 'args': {'sort_index': c}})
+        ev = []
+        for s0, s1, d, f in fr:
+            ev.append((s0, 1, d, f, s1 - s0))   # B: at equal icount after closes, shallow first
+            ev.append((s1, 0, -d, f, 0))        # E: at equal icount before opens, deep first
+        ev.sort(key=lambda x: (x[0], x[1], x[2]))
+        last = None
+        for ic, kind, d, f, n in ev:
+            t = int(round(ix.t_ns(ic) - t_base))
+            t = t if last is None else max(last, t)     # integer ns, never decreasing per track
+            last = t
+            e = {'name': ix.name(f), 'ph': 'B' if kind else 'E', 'ts': t / 1000.0, 'pid': 1, 'tid': tid}
+            if kind:
+                e['args'] = {'instructions': int(n), 'first_instruction': int(ic)}
+            out_ev.append(e)
     out = a.o or os.path.join(a.snap, 'trace.perfetto.json')
-    json.dump({'traceEvents': meta + ev, 'displayTimeUnit': 'ns'}, open(out, 'w'))
-    print('%d slices -> %s (open in https://ui.perfetto.dev: the file is processed in the browser)' % (len(ev), out))
-
+    json.dump({'traceEvents': out_ev, 'displayTimeUnit': 'ns'}, open(out, 'w'))
+    print('%d slices on %d core track(s) -> %s (open in https://ui.perfetto.dev: processed in the browser)' % (
+        nfr, len(cores), out))
 
 def cmd_speedscope(a):
-    ix = Index(a.snap, a.gips)
-    fr = ix.frames()
-    names = sorted(set(f for _, _, _, f in fr))
+    cores = load(a.snap, a.gips)
+    frames_by_core = {c: ix.frames() for c, ix in cores.items()}
+    names = sorted(set(f for fr in frames_by_core.values() for _, _, _, f in fr))
     fid = {f: i for i, f in enumerate(names)}
-    ev = []
-    for s0, s1, d, f in fr:
-        ev.append((ix.t_ns(s0), 0, d, fid[f]))
-        ev.append((ix.t_ns(s1), 1, -d, fid[f]))
-    ev.sort()
-    events = [{'type': 'O' if k == 0 else 'C', 'frame': i, 'at': t} for t, k, _, i in ev]
+    any_ix = next(iter(cores.values()))
+    profiles = []
+    for c, ix in cores.items():
+        ev = []
+        for s0, s1, d, f in frames_by_core[c]:
+            ev.append((ix.t_ns(s0), 0, d, fid[f]))
+            ev.append((ix.t_ns(s1), 1, -d, fid[f]))
+        ev.sort()
+        events = [{'type': 'O' if k == 0 else 'C', 'frame': i, 'at': t} for t, k, _, i in ev]
+        profiles.append({'type': 'evented', 'name': 'core %d' % c, 'unit': 'nanoseconds',
+                         'startValue': events[0]['at'] if events else 0,
+                         'endValue': events[-1]['at'] if events else 0, 'events': events})
     prof = {'$schema': 'https://www.speedscope.app/file-format-schema.json',
-            'shared': {'frames': [{'name': ix.name(f)} for f in names]},
-            'profiles': [{'type': 'evented', 'name': 'A55 core 0 ETM trace', 'unit': 'nanoseconds',
-                          'startValue': events[0]['at'] if events else 0,
-                          'endValue': events[-1]['at'] if events else 0, 'events': events}],
-            'name': os.path.basename(a.snap.rstrip('/'))}
+            'shared': {'frames': [{'name': any_ix.name(f)} for f in names]},
+            'profiles': profiles, 'name': os.path.basename(a.snap.rstrip('/'))}
     out = a.o or os.path.join(a.snap, 'trace.speedscope.json')
     json.dump(prof, open(out, 'w'))
-    print('%d events -> %s (open in https://www.speedscope.app, local)' % (len(events), out))
-
+    print('%d profile(s) -> %s (open in https://www.speedscope.app, local)' % (len(profiles), out))
 
 def cmd_folded(a):
-    ix = Index(a.snap, a.gips)
+    cores = load(a.snap, a.gips)
     agg = {}
+    kinds = set()
+    for c, ix in cores.items():
+        kinds.add(_fold(ix, agg, a, 'core %d' % c if len(cores) > 1 else None))
+    out = a.o or os.path.join(a.snap, 'trace.folded')
+    with open(out, 'w') as fo:
+        for k, v in sorted(agg.items(), key=lambda x: -x[1]):
+            fo.write('%s %d\n' % (k, round(v)))
+    print('%d stacks over %d core(s), weighted by %s -> %s (flamegraph.pl, or speedscope)' % (
+        len(agg), len(cores), '/'.join(sorted(kinds)), out))
+
+
+def _fold(ix, agg, a, prefix):
     stack = []
     cyc = len(ix.cc) >= 2 and not a.instructions   # weight by CPU cycles when the trace has them
     if cyc:   # one vectorised interpolation: np.interp on a scalar rescans the whole table each call
@@ -269,19 +346,19 @@ def cmd_folded(a):
         while len(stack) < depth:
             stack.append(f)
         stack[depth - 1] = f
-        key = ';'.join(ix.name(g) for g in stack)
+        key = ';'.join(([prefix] if prefix else []) + [ix.name(g) for g in stack])
         agg[key] = agg.get(key, 0) + float(w)
-    out = a.o or os.path.join(a.snap, 'trace.folded')
-    with open(out, 'w') as fo:
-        for k, v in sorted(agg.items(), key=lambda x: -x[1]):
-            fo.write('%s %d\n' % (k, round(v)))
-    print('%d stacks, weighted by %s -> %s (flamegraph.pl, or speedscope: it opens folded files too)' % (
-        len(agg), 'CPU cycles' if cyc else 'instructions', out))
+    return 'CPU cycles' if cyc else 'instructions'
 
 
 def cmd_nav(a):
     import capstone
-    ix = Index(a.snap, a.gips)
+    cores = load(a.snap, a.gips)
+    core = a.core if a.core is not None else min(cores)
+    if core not in cores:
+        sys.exit('no core %d in this trace; it has %s' % (core, sorted(cores)))
+    ix = cores[core]
+    print('core %d (of %s)' % (core, sorted(cores)))
     r = ix.r
     if not len(r):
         sys.exit('empty index')
@@ -289,7 +366,7 @@ def cmd_nav(a):
     cum = r[:, 3]                       # icount at the start of each range
     md = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
     images = []                         # (va, bytes)
-    ini = open(os.path.join(a.snap, 'cpu_0.ini')).read()
+    ini = open(os.path.join(a.snap, 'cpu_%d.ini' % core)).read()
     for f, va, ln in re.findall(r'file=(\S+)\naddress=0x([0-9A-F]+)\nlength=0x([0-9A-F]+)', ini):
         images.append((int(va, 16), open(os.path.join(a.snap, f), 'rb').read()))
     a2l = {}
@@ -430,6 +507,8 @@ def cmd_nav(a):
 EXAMPLES = '''
 examples (from trace/; ss-t5-cc has timestamps + cycle counts, the most accurate):
   ./tracetool.py nav ss-t5-cc              step through the history (type h for the commands)
+  ./tracetool.py perfetto ss-t6-6cores      six cores, one Perfetto track each
+  ./tracetool.py nav ss-t6-6cores --core 3 step through core 3
   ./tracetool.py perfetto ss-t5-cc         then open ss-t5-cc/trace.perfetto.json in ui.perfetto.dev
   ./tracetool.py speedscope ss-t5-cc       then open ss-t5-cc/trace.speedscope.json in speedscope.app
   xdg-open ss-t5-cc/flamegraph.svg         the flame graph (any browser)
@@ -450,6 +529,7 @@ def main():
         if c == 'folded':
             p.add_argument('--instructions', action='store_true', help='weight by instructions even with cycle counts')
     p = sp.add_parser('nav'); p.add_argument('snap'); p.add_argument('n', nargs='?'); p.add_argument('--gips', type=float, default=2.5)
+    p.add_argument('--core', type=int, help='which core to step through (default: the lowest traced)')
     a = ap.parse_args()
     {'index': cmd_index, 'perfetto': cmd_perfetto, 'speedscope': cmd_speedscope, 'folded': cmd_folded,
      'nav': cmd_nav}[a.cmd](a)
