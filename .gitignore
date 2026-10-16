@@ -1,3 +1,9 @@
 board/out/
 logs/*.pid
 __pycache__/
+# NXP's design-file bundle (101 MB, downloadable; also in elb1 4.docs/1.manual/frmd-imx95-pro)
+frmd-imx95-pro/FRDM-IMX95-PRO-DESIGNFILES/
+frmd-imx95-pro/FRDM-IMX95-PRO-DESIGNFILES.zip
+# trace buffers and snapshot memory images (MBs each; regenerate with ocd.sh trace + trace/mksnap.py)
+trace/*.bin
+trace/ss-*/*.bin
