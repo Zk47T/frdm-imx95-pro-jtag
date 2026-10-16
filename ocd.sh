@@ -10,6 +10,8 @@
 #   ocd.sh server [dm]       the same targets, left running for gdb on :3333
 #   ocd.sh mdm [N]           after authentication: MDM-AP status, then N samples of each A55's WFI
 #   ocd.sh pcs [CORE] [N]    after authentication: N samples of an A55's PC without halting it
+#   ocd.sh etm-ids [CORE]    OS-unlock an A55's ETM and print its ID registers (for the trace decoder)
+#   ocd.sh trace CORE BASE SIZE MS   ETM -> ETF -> ETR trace into DRAM (docs/04)
 # DBG0=0x... ocd.sh ...      another A55 debug base (default 0x80810000, measured 2026-10-16)
 # SWD=1 ocd.sh ...           SWD instead of JTAG (SWDIO = TMS, SWCLK = TCK; TDO is then free
 #                            for SWO). Not for 'scan'.
@@ -66,7 +68,16 @@ mdm)
 	ocd "${DAP[@]}" -c mdm_status -c "mdm_idle ${2:-1000}" -c shutdown ;;
 pcs)
 	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c "a55_pcs ${2:-0} ${3:-2000}" -c shutdown ;;
+etm-ids)
+	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c "etm_ids ${2:-0}" -c shutdown ;;
+trace)
+	# trace CORE BASE SIZE MS: core's ETM -> ETF -> ETR into BASE..BASE+SIZE for MS ms
+	# (docs/04). Linux on a board booted by linux.sh: BASE in a no-map region, e.g.
+	# 0xf1000000 0x1000000 (below 4 GB: readable over JTAG) or 0x400000000 0x80000000 (2 GB)
+	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c "etm_ids ${2:-0}" \
+	    -c "cs_trace_start ${2:-0} ${3:-0xf1000000} ${4:-0x1000000}" -c "sleep ${5:-300}" \
+	    -c "cs_trace_stop ${2:-0}" -c shutdown ;;
 *)
-	sed -n '2,16p' "$0"; exit 2 ;;
+	sed -n '2,18p' "$0"; exit 2 ;;
 esac
 echo "log: $LOG"

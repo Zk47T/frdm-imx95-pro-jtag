@@ -327,3 +327,114 @@ proc a55_pcs {{core 0} {n 2000}} {
 		echo [format "  %s %6d" [lindex $r 0] [lindex $r 1]]
 	}
 }
+
+# --- trace through the debugger: core n's ETM -> funnels -> ETF (FIFO) -> ETR -> DRAM -------
+# (2026-10-16) Linux can't do this here: its first read of the ETF's PIDR (0x41030FE0, the A55's
+# path) takes a synchronous external abort and kills init. The debugger's APB-AP reaches the same
+# blocks at 0x8103xxxx (ETF), 0x8104xxxx (ETR), and core n's ETM at the debug base + 0x30000.
+# The funnels have no registers (RM 14.1). The sequences are the kernel's own
+# (coresight-etm4x-core.c etm4_enable_hw, coresight-tmc-etr.c __tmc_etr_enable_hw), except the
+# exception-level filter: Linux runs at EL2 (VHE) here, so nothing is excluded.
+# Needs IMX95_A55 (the imx95.apb target) and the core powered: boot with cpuidle.off=1.
+set cs_etf 0x81030000
+set cs_etr 0x81040000
+set cs_lock 0xc5acce55
+
+proc cs_r {a} { return [imx95.apb read_memory $a 32 1] }
+proc cs_w {a v} { imx95.apb write_memory $a 32 [list $v] }
+proc cs_wait {a mask val {ms 500}} {
+	set t0 [clock milliseconds]
+	while {([cs_r $a] & $mask) != $val} {
+		if {[clock milliseconds] - $t0 > $ms} {
+			error [format "cs: (%#x & %#x) never became %#x (now %#x)" $a $mask $val [cs_r $a]]
+		}
+	}
+}
+proc etm_base {core} { return [expr {$::_DBG0 + $core * 0x100000 + 0x30000}] }
+
+# The ETM's ID registers, after the OS unlock; what an OpenCSD snapshot needs (etm_0.ini).
+proc etm_ids {core} {
+	set e [etm_base $core]
+	cs_w [expr {$e + 0xfb0}] $::cs_lock
+	cs_w [expr {$e + 0x300}] 0
+	set out [format "TRCOSLSR=%#x TRCPDSR=%#x" [cs_r [expr {$e + 0x304}]] [cs_r [expr {$e + 0x314}]]]
+	foreach {n o} {TRCIDR0 0x1e0 TRCIDR1 0x1e4 TRCIDR2 0x1e8 TRCIDR3 0x1ec TRCIDR4 0x1f0 TRCIDR5 0x1f4
+	               TRCIDR8 0x180 TRCIDR9 0x184 TRCIDR10 0x188 TRCIDR11 0x18c TRCIDR12 0x190 TRCIDR13 0x194
+	               TRCAUTHSTATUS 0xfb8 TRCDEVARCH 0xfbc} {
+		append out [format " %s=%#x" $n [cs_r [expr {$e + $o}]]]
+	}
+	echo "etm $core: $out"
+	return $out
+}
+
+# Start: ETR circular buffer at base (64-bit physical, its own AXI master: not behind the SMMU,
+# no iommus in the DT) of size bytes; ETF as a hardware FIFO link; then the ETM.
+proc cs_trace_start {core base size {traceid 0x10} {configr 0x0}} {
+	set r $::cs_etr; set f $::cs_etf; set e [etm_base $core]
+	foreach b [list $r $f $e] { cs_w [expr {$b + 0xfb0}] $::cs_lock }
+	# ETR (sink)
+	cs_w [expr {$r + 0x20}] 0
+	cs_wait [expr {$r + 0x0c}] 0x4 0x4
+	cs_w [expr {$r + 0x04}] [expr {$size / 4}]
+	cs_w [expr {$r + 0x28}] 0
+	set ax [cs_r [expr {$r + 0x110}]]
+	cs_w [expr {$r + 0x110}] [expr {($ax & ~0xfbf) | 0x2 | (0xf << 8)}]
+	cs_w [expr {$r + 0x118}] [expr {$base & 0xffffffff}]
+	cs_w [expr {$r + 0x11c}] [expr {$base >> 32}]
+	cs_w [expr {$r + 0x14}] [expr {$base & 0xffffffff}]
+	cs_w [expr {$r + 0x38}] [expr {$base >> 32}]
+	cs_w [expr {$r + 0x18}] [expr {$base & 0xffffffff}]
+	cs_w [expr {$r + 0x3c}] [expr {$base >> 32}]
+	cs_w [expr {$r + 0x0c}] 0
+	cs_w [expr {$r + 0x304}] 0x133
+	cs_w [expr {$r + 0x34}] 0
+	cs_w [expr {$r + 0x20}] 1
+	# ETF (link): hardware FIFO
+	cs_w [expr {$f + 0x20}] 0
+	cs_wait [expr {$f + 0x0c}] 0x4 0x4
+	cs_w [expr {$f + 0x28}] 2
+	cs_w [expr {$f + 0x304}] 0x3
+	cs_w [expr {$f + 0x34}] 0
+	cs_w [expr {$f + 0x20}] 1
+	# ETM (source)
+	cs_w [expr {$e + 0x300}] 0
+	cs_w [expr {$e + 0x310}] [expr {[cs_r [expr {$e + 0x310}]] | 0x8}]
+	cs_w [expr {$e + 0x004}] 0
+	cs_wait [expr {$e + 0x00c}] 0x1 0x1
+	cs_w [expr {$e + 0x010}] $configr
+	cs_w [expr {$e + 0x018}] 0
+	cs_w [expr {$e + 0x020}] 0
+	cs_w [expr {$e + 0x024}] 0
+	cs_w [expr {$e + 0x02c}] 0
+	cs_w [expr {$e + 0x030}] 0
+	cs_w [expr {$e + 0x034}] 0xc
+	cs_w [expr {$e + 0x038}] 0
+	cs_w [expr {$e + 0x03c}] 0
+	cs_w [expr {$e + 0x040}] $traceid
+	cs_w [expr {$e + 0x080}] 0x201
+	cs_w [expr {$e + 0x084}] 0
+	cs_w [expr {$e + 0x088}] 0
+	cs_w [expr {$e + 0x004}] 1
+	cs_wait [expr {$e + 0x00c}] 0x1 0x0
+	echo [format "cs: tracing core %d, trace id %#x, into %#x + %#x; ETR STS %#x" $core $traceid $base $size [cs_r [expr {$r + 0x0c}]]]
+}
+
+# Stop: the ETM, then flush the ETF and the ETR (stop on flush). Returns the ETR's state.
+proc cs_trace_stop {core} {
+	set r $::cs_etr; set f $::cs_etf; set e [etm_base $core]
+	cs_w [expr {$e + 0x004}] 0
+	cs_wait [expr {$e + 0x00c}] 0x1 0x1
+	cs_w [expr {$f + 0x304}] [expr {[cs_r [expr {$f + 0x304}]] | 0x40}]
+	cs_wait [expr {$f + 0x304}] 0x40 0x0
+	cs_w [expr {$f + 0x20}] 0
+	cs_w [expr {$r + 0x304}] [expr {[cs_r [expr {$r + 0x304}]] | 0x1040}]
+	cs_wait [expr {$r + 0x304}] 0x40 0x0
+	cs_wait [expr {$r + 0x0c}] 0x4 0x4
+	set sts [cs_r [expr {$r + 0x0c}]]
+	set rwp [expr {([cs_r [expr {$r + 0x3c}]] << 32) | [cs_r [expr {$r + 0x18}]]}]
+	set rrp [expr {([cs_r [expr {$r + 0x38}]] << 32) | [cs_r [expr {$r + 0x14}]]}]
+	cs_w [expr {$r + 0x20}] 0
+	set s [format "STS=%#x full=%d memerr=%d RRP=%#x RWP=%#x" $sts [expr {$sts & 1}] [expr {($sts >> 5) & 1}] $rrp $rwp]
+	echo "cs: stopped: $s"
+	return $s
+}
