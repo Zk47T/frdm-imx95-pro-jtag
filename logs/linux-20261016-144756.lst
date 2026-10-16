@@ -1,0 +1,10 @@
+uuu_version 1.4.149
+FB: ucmd setenv fastboot_buffer ${loadaddr}
+FB: download -f _Image
+FB: ucmd setenv fastboot_buffer ${fdt_addr}
+FB: download -f _board.dtb
+FB: ucmd setenv fastboot_buffer 0x96000000
+FB: download -f _initrd
+FB: ucmd setenv bootargs console=ttyLP0,115200 root=/dev/mmcblk0p2 rootwait rw loglevel=7 ignore_loglevel nokaslr cpuidle.off=1 
+FB: acmd booti ${loadaddr} 0x96000000:1a8089 ${fdt_addr}
+FB: done

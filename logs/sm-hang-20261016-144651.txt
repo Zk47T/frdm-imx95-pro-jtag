@@ -1,0 +1,37 @@
+=== power.r ===
+000: ana       = on
+001: aon       = on
+002: bbsm      = on
+003: camera    = on
+004: ccmsrcgpc = on
+005: a55c0     = on
+006: a55c1     = on
+007: a55c2     = on
+008: a55c3     = on
+009: a55c4     = on
+010: a55c5     = on
+011: a55p      = on
+012: ddr       = on
+013: display   = on
+014: gpu       = off
+015: hsio_top  = on
+016: hsio_waon = on
+017: m7        = on
+018: netc      = on
+019: noc       = on
+020: npu       = off
+021: vpu       = off
+022: wakeup    = on
+
+=== syslog ===
+Wake vector = 0
+Sys sleep mode = 0
+Sys sleep flags = 0x00000000
+MIX power status = 0x00000000
+MEM power status = 0x00000000
+PLL power status = 0x00000000
+Sleep latency = 0 usec
+Wake latency = 0 usec
+Sleep count = 0
+Device err log = 0x00000000
+

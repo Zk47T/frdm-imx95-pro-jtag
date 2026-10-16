@@ -1,0 +1,1301 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-10-15-16:13)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+adapter speed: 469 kHz
+adapter speed: 15000 kHz
+1
+Info : [imx95.a55.0] Hardware thread awareness created
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 15000 kHz
+Info : JTAG tap: imx95.cpu tap/device found: 0x9893801d (mfg: 0x00e (Freescale (Motorola)), part: 0x8938, ver: 0x9)
+Info : [imx95.ahb] gdb port disabled
+Info : [imx95.apb] gdb port disabled
+Info : [imx95.a55.0] gdb port disabled
+Info : [imx95.a55.1] gdb port disabled
+Info : [imx95.a55.2] gdb port disabled
+Info : [imx95.a55.3] gdb port disabled
+Info : [imx95.a55.4] gdb port disabled
+Info : [imx95.a55.5] gdb port disabled
+Info : [imx95.m7] gdb port disabled
+Info : [imx95.m33] gdb port disabled
+Info : Listening on port 9090 for rtt connections
+Info : Listening on port 6666 for tcl connections
+Info : telnet server disabled
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : rtt: Searching for control block 'SEGGER RTT'
+Error: rtt: No control block found
+FAIL
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+MDMSTATUS 0x600013c4: M33 halted 0, sleeping 0, deep 0; M7 halted 0, sleeping 0, deep 0; system reset 1
+MDMSTATUS2 0x00000000: A55 cores (bit n = core n) in debug 0x00, in WFI 0x00, in WFE 0x00
+0
+0x1000000 0x0 0x0 0x0 0x0 0x0 0x1000000 0x0
+0xf0000001
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+0x00000000
+0x600013c4
+dumped 160 bytes in 0.002000s (78.125 KiB/s)
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+dumped 8 bytes in 0.001000s (7.812 KiB/s)
+dumped 16 bytes in 0.001000s (15.625 KiB/s)
+dumped 8 bytes in 0.001000s (7.812 KiB/s)
+dumped 64 bytes in 0.002000s (31.250 KiB/s)
+dumped 98304 bytes in 0.999000s (96.096 KiB/s)
+dumped 360448 bytes in 3.638000s (96.756 KiB/s)
+dumped 131072 bytes in 1.324000s (96.677 KiB/s)
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+dumped 8 bytes in 0.000000s (7.812 KiB/s)
+dumped 16 bytes in 0.001000s (15.625 KiB/s)
+dumped 8 bytes in 0.001000s (7.812 KiB/s)
+dumped 64 bytes in 0.001000s (62.500 KiB/s)
+dumped 98304 bytes in 0.993000s (96.677 KiB/s)
+dumped 360448 bytes in 3.636000s (96.810 KiB/s)
+dumped 131072 bytes in 1.324000s (96.677 KiB/s)
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+0x0
+0x1
+0x1
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x0
+0x1
+0xb
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x0
+0x1
+0xb
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x0
+0x1
+0xb
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x0
+0x1
+0xb
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c11e0
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x8002ff3c
+0xc0ff8000
+0x811c11e0
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c1218
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x811c12cc
+0xc0ff8000
+0x0
+0x1
+0xb
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+0x80041060
+0xc0ff8000
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+Info : imx95.a55.0: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.1: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.2: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.3: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.4: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.5: hardware has 6 breakpoints, 4 watchpoints
+0
+Info : imx95.a55.4 socket 0 cluster 0 core 4 thread 0 multi core
+Info : imx95.a55.0 socket 0 cluster 0 core 0 thread 0 multi core
+Info : imx95.a55.1 socket 0 cluster 0 core 1 thread 0 multi core
+Info : imx95.a55.2 socket 0 cluster 0 core 2 thread 0 multi core
+Info : imx95.a55.3 socket 0 cluster 0 core 3 thread 0 multi core
+Info : imx95.a55.5 socket 0 cluster 0 core 5 thread 0 multi core
+imx95.a55.4 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x80400009 pc: 0xffff8000811c12d0
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+imx95.a55.0 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x604003c9 pc: 0xffff800080041064
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+imx95.a55.1 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x604003c9 pc: 0xffff800080041064
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+imx95.a55.2 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x604003c9 pc: 0xffff800080041064
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+imx95.a55.3 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x604003c9 pc: 0xffff800080041064
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+imx95.a55.5 halted in AArch64 state due to debug-request, current mode: EL2H
+cpsr: 0x604003c9 pc: 0xffff800080041064
+MMU: enabled, D-Cache: enabled, I-Cache: enabled
+halted
+dumped 16 bytes in 0.005000s (3.125 KiB/s)
+dumped 8 bytes in 0.005000s (1.562 KiB/s)
+dumped 64 bytes in 0.005000s (12.500 KiB/s)
+dumped 98304 bytes in 1.153000s (83.261 KiB/s)
+dumped 360448 bytes in 4.227000s (83.274 KiB/s)
+dumped 131072 bytes in 1.537000s (83.279 KiB/s)
+Info : dropped 'tcl' connection
+Info : accepting 'tcl' connection on tcp/6666
+0xffff0000
+0x0
+0x1fcc
+0x0
+0x9000000
+0x0
+0x0
+0x00000000
+Info : dropped 'tcl' connection
+shutdown command invoked

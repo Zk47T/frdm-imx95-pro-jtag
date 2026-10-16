@@ -1,0 +1,3 @@
+=== clock.r all ===
+Invalid parameter(s)!
+

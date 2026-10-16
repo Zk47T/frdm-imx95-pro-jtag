@@ -1,0 +1,18 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-09-30-12:07)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+adapter speed: 469 kHz
+adapter speed: 7500 kHz
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 7500 kHz
+Info : JTAG tap: imx95.cpu tap/device found: 0x9893801d (mfg: 0x00e (Freescale (Motorola)), part: 0x8938, ver: 0x9)
+Warn : gdb services need one or more targets defined
+0
+JTAGC IDCODE 0x9893801d (bits 16:12 = 0x18, the RM says 0x18)
+JTAG-DP IDCODE 0x0ba03477 (ARM's DPs end in 477)
+DP CTRL/STAT 0xf0000001: CDBGPWRUPACK 1, CSYSPWRUPACK 1, STICKYERR 0
+AP 0 IDR 0x84770001 a MEM-AP: the normal SWJ-DP
+AP 1 IDR 0x54770002 a MEM-AP: the normal SWJ-DP
+shutdown command invoked

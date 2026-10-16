@@ -1,0 +1,16 @@
+
+core 0 EDPRSR 0x1 EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     60 local_cpu_stop+0x20
+core 1 EDPRSR 0xb EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     60 local_cpu_stop+0x20
+core 2 EDPRSR 0xb EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     60 local_cpu_stop+0x20
+core 3 EDPRSR 0xb EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     60 local_cpu_stop+0x20
+core 4 EDPRSR 0xb EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     56 __delay+0x4c
+      2 arch_timer_read_cntvct_el0+0x0
+      1 call_on_irq_stack+0x34
+      1 __delay_cycles+0x2c
+core 5 EDPRSR 0xb EDDEVID.PCS 0 PMDEVID.PCS 1 (PMPCSR): 0 no-sample
+     60 local_cpu_stop+0x20

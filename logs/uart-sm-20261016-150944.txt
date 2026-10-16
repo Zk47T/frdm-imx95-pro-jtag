@@ -1,0 +1,13 @@
+--- /dev/ttyACM3 opened 2026-10-16 15:09:44 ---
+[    9.016] 
+[    9.016] DDR OEI: (Build 217, Commit e9bce6f4, Aug 08 2026 18:24:27)
+[    9.016] 
+[    9.016] DDR OEI: Compiled for SOC MIMX95(B0), Board mx95lp5
+[    9.016] DDR OEI: IMEM + DMEM load in 3503 us
+[   14.025] DDR OEI: TRAINING complete in 4875594 us
+[   14.025] DDR OEI: done, err = 0
+[   14.025] 
+[   14.025] Hello from SM (Build 896, Commit 44f76dcb, Aug 08 2026 18:25:46)
+[   14.025] 
+[   14.025] Press key to enter monitor mode.
+[   14.025] 

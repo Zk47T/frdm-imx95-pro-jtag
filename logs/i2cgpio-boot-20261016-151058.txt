@@ -1,0 +1,113 @@
+$ cat /proc/uptime; lsmod | grep -E "i2c_gpio|i2c-gpio"
+54.16 312.14
+i2c_gpio               12288  0
+
+$ dmesg | grep -iE "i2c-gpio|i2c_gpio|pca953|tcpci|attiny|0045|dsi|tc358|panel|dpu|drm|regulator|backlight|-110" | grep -v "dependency cycle" | tail -n 40
+[    0.004576] GICv3: CPU2: found redistributor 200 region 0:0x00000000480a0000
+[    0.004584] GICv3: CPU2: using allocated LPI pending table @0x00000001000b0000
+[    0.252251] imx8mq-usb-phy 4c1f0040.phy: supply vbus not found, using dummy regulator
+[    0.266694] imx95-mipi-dsi 4acf0000.dsi: Using Pixel Link1 as input source
+[    0.306233] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[    0.314462] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[    0.317251] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    0.318756] faux_driver regulatory: Direct firmware load for regulatory.db failed with error -2
+[    0.318769] faux_driver regulatory: Falling back to sysfs fallback for: regulatory.db
+[    0.325131] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[    0.378203] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[    2.108769] systemd[1]: Load Kernel Module drm skipped, unmet condition check ConditionKernelModuleLoaded=!drm
+[   10.469329] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[   10.474333] platform regulator-ext-12v: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474351] platform regulator-exp-5v: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474357] platform regulator-usdhc3: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474364] platform regulator-vbus: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474370] platform regulator-m2-pwr: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474376] platform regulator-m2-mkey-1-pwr: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42530000/i2c3-gpio-expander@20
+[   10.474382] platform regulator-m2-mkey-2-pwr: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42530000/i2c3-gpio-expander@20
+[   10.474388] platform 4b400000.display-controller: deferred probe pending: imx95-dpu: failed to attach bridge /soc/bridge@4b0d0000/channel@1 to encoder None-51
+[   10.474394] platform panel-rpi-7inch: deferred probe pending: platform: supplier 1-0045 not ready
+[   10.474400] mipi-dsi 4acf0000.dsi.0: deferred probe pending: mipi-dsi: supplier 1-0045 not ready
+[   10.474412] platform 4c200000.usb: deferred probe pending: platform: supplier regulator-vbus not ready
+[   10.474418] i2c 1-0045: deferred probe pending: i2c: supplier regulator-dcdc-3v3 not ready
+[   10.474434] platform regulator-can1-stby: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474440] platform regulator-can2-stby: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474445] platform regulator-dcdc-5v: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474451] platform regulator-dcdc-3v3: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   10.474456] platform regulator-exp-1v8: deferred probe pending: platform: wait for supplier /soc/bus@42000000/i2c@42540000/i2c4-gpio-expander@22
+[   20.042318] pca953x 2-0020: using no AI
+[   20.043041] pca953x 2-0020: failed writing register: -6
+[   20.055319] i2c-gpio 42000000.bus:i2c@42530000: using lines 540 (SDA) and 541 (SCL)
+[   20.142476] p3t1085_i3c 0-23615290090: supply vcc not found, using dummy regulator
+[   20.147649] pca953x 3-0022: using AI
+[   20.148305] pca953x 3-0022: failed writing register: -6
+[   20.148830] i2c-gpio 42000000.bus:i2c@42540000: using lines 542 (SDA) and 543 (SCL)
+[   20.149280] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[   20.443366] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[   20.576075] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+
+$ ls /dev/dri 2>&1; mount -t debugfs none /sys/kernel/debug 2>/dev/null; cat /sys/kernel/debug/devices_deferred
+ls: /dev/dri: No such file or directory
+regulator-can1-stby	platform: supplier 3-0022 not ready
+regulator-can2-stby	platform: supplier 3-0022 not ready
+regulator-dcdc-5v	platform: supplier 3-0022 not ready
+regulator-dcdc-3v3	platform: supplier regulator-dcdc-5v not ready
+regulator-exp-1v8	platform: supplier 3-0022 not ready
+regulator-exp-3v3	platform: supplier regulator-dcdc-3v3 not ready
+0003:01:00.0	
+sound-micfil	imx-card: micfil hifi: error getting cpu dai info
+sound-mqs	asoc-audio-graph-card2: parse error
+regulator-ext-12v	platform: supplier 3-0022 not ready
+regulator-exp-5v	platform: supplier regulator-dcdc-5v not ready
+regulator-usdhc3	platform: supplier regulator-m2-pwr not ready
+regulator-vbus	platform: supplier 3-0022 not ready
+regulator-m2-pwr	platform: supplier 3-0022 not ready
+regulator-m2-mkey-2-pwr	platform: supplier 2-0020 not ready
+regulator-m2-mkey-1-pwr	platform: supplier 2-0020 not ready
+4b400000.display-controller	imx95-dpu: failed to attach bridge /soc/bridge@4b0d0000/channel@1 to encoder None-51
+panel-rpi-7inch	platform: supplier 1-0045 not ready
+4acf0000.dsi.0	mipi-dsi: supplier 1-0045 not ready
+42550000.spi	platform: supplier 3-0022 not ready
+4c200000.usb	platform: supplier regulator-vbus not ready
+usdhc3_pwrseq	platform: supplier 3-0022 not ready
+1-0045	i2c: supplier regulator-dcdc-3v3 not ready
+
+i2c-2 0x20: i2cget: read failed: No such device or address
+i2c-2 0x50: i2cget: read failed: No such device or address
+i2c-2 0x52: i2cget: read failed: No such device or address
+i2c-2 0x71: i2cget: read failed: No such device or address
+
+i2c-3 0x22: i2cget: read failed: No such device or address
+
+> > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > 
+07f12c9805841df34faf46db9fdfb366  /mnt/i2cbang.sh
+idle:        sda=1 scl=1
+START sda lo: sda=0 scl=1
+bit 7 = 0  scl released: sda=0 scl=1
+bit 6 = 1  scl released: sda=1 scl=1
+bit 5 = 0  scl released: sda=0 scl=1
+bit 4 = 0  scl released: sda=0 scl=1
+bit 3 = 0  scl released: sda=0 scl=1
+bit 2 = 1  scl released: sda=1 scl=1
+bit 1 = 0  scl released: sda=0 scl=1
+bit 0 = 0  scl released: sda=0 scl=1
+ACK clock:    sda=1 scl=1   (sda=0: a device acknowledged)
+STOP:        sda=1 scl=1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --                         
+
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --                         
+

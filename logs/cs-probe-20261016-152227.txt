@@ -1,0 +1,39 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-09-30-12:07)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+adapter speed: 469 kHz
+adapter speed: 7500 kHz
+1
+Info : [imx95.a55.0] Hardware thread awareness created
+a55_pcs
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 7500 kHz
+Info : JTAG tap: imx95.cpu tap/device found: 0x9893801d (mfg: 0x00e (Freescale (Motorola)), part: 0x8938, ver: 0x9)
+Info : [imx95.ahb] gdb port disabled
+Info : [imx95.apb] gdb port disabled
+Info : [imx95.a55.0] starting gdb server on 3333
+Info : Listening on port 3333 for gdb connections
+Info : [imx95.m7] starting gdb server on 3334
+Info : Listening on port 3334 for gdb connections
+Info : [imx95.m33] starting gdb server on 3335
+Info : Listening on port 3335 for gdb connections
+0
+rd
+ETF CIDR0-3                  0x81030ff0: 0xd 0x90 0x5 0xb1
+ETF PIDR0-3                  0x81030fe0: 0x61 0xb9 0x1b 0x0
+ETF DEVID/AUTH               0x81030fc8: 0x480
+ETF STS CTL MODE             0x8103000c: 0xc
+ETR CIDR0-3                  0x81040ff0: 0xd 0x90 0x5 0xb1
+ETR DEVID                    0x81040fc8: 0x1b40
+ETR AUTHSTATUS               0x81040fb8: 0x33
+ETR STS                      0x8104000c: 0xc
+ETM0 CIDR0-3                 0x80840ff0: 0xd 0x90 0x5 0xb1
+ETM0 PIDR0-3                 0x80840fe0: 0x5 0xbd 0x3b 0x0
+Error: JTAG-DP STICKY ERROR
+Error: Failed to read memory at 0x808401e0
+ETM0 TRCIDR0-2(1e0..)        0x808401e0: ERROR failed to read memory
+ETM0 TRCAUTHSTATUS           0x80840fb8: 0xcc
+ETM0 TRCOSLSR/PDSR           0x80840304: 0xa
+ETM0 TRCPDSR                 0x80840314: 0x23
+shutdown command invoked

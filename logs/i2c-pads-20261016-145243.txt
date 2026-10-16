@@ -1,0 +1,133 @@
+$ mount -t debugfs none /sys/kernel/debug 2>/dev/null; ls /sys/kernel/debug/pinctrl/
+pinctrl-devices              pinctrl-maps
+pinctrl-handles              scmi_dev.8-scmi-pinctrl-imx
+
+$ grep -E "GPIO_IO(2[8-9]|3[0-5])" /sys/kernel/debug/pinctrl/*/pinmux-pins
+
+
+$ grep -E "GPIO_IO(2[8-9]|3[0-5])" /sys/kernel/debug/pinctrl/*/pinconf-pins
+
+
+$ for d in /sys/bus/platform/devices/43810000.gpio /sys/bus/platform/devices/42530000.i2c /sys/bus/platform/devices/42540000.i2c; do echo "$d driver=$(basename $(readlink $d/driver) 2>/dev/null) rpm=$(cat $d/power/runtime_status 2>/dev/null)"; done
+/sys/bus/platform/devices/43810000.gpio driver=gpio-vf610 rpm=unsupported
+/sys/bus/platform/devices/42530000.i2c driver=imx-lpi2c rpm=suspended
+/sys/bus/platform/devices/42540000.i2c driver=imx-lpi2c rpm=suspended
+
+$ P=/sys/kernel/debug/pinctrl/scmi_dev.8-scmi-pinctrl-imx; head -5 $P/pinmux-pins; grep -iE "i2c|lpi2c|42530000|42540000" $P/pinmux-pins | head -12
+head: invalid option -- '5'
+BusyBox v1.37.0 () multi-call binary.
+Usage: head [OPTIONS] [FILE]...
+head: invalid option -- '1'
+BusyBox v1.37.0 () multi-call binary.
+Usage: head [OPTIONS] [FILE]...
+
+$ P=/sys/kernel/debug/pinctrl/scmi_dev.8-scmi-pinctrl-imx; grep -iE "IO28|IO29|IO30|IO31|IO33|IO34" $P/pins | head
+pin 32 (gpioio28) 28:43810000.gpio 
+pin 33 (gpioio29) 29:43810000.gpio 
+pin 34 (gpioio30) 30:43810000.gpio 
+pin 35 (gpioio31) 31:43810000.gpio 
+pin 37 (gpioio33) 13:43850000.gpio 
+pin 38 (gpioio34) 14:43850000.gpio 
+
+$ echo PDIR $(devmem 0x43810050 32) PDDR $(devmem 0x43810054 32) PDOR $(devmem 0x43810040 32)
+-sh: devmem: not found
+-sh: devmem: not found
+-sh: devmem: not found
+PDIR PDDR PDOR
+
+$ B=/mnt/busybox; for i in 1 2 3; do echo PDIR $($B devmem 0x43810050 32) PDDR $($B devmem 0x43810054 32) PDOR $($B devmem 0x43810040 32); done
+PDIR 0x00130000 PDDR 0x00000000 PDOR 0x00000000
+PDIR 0x00130000 PDDR 0x00000000 PDOR 0x00000000
+PDIR 0x00130000 PDDR 0x00000000 PDOR 0x00000000
+
+$ P=/sys/kernel/debug/pinctrl/scmi_dev.8-scmi-pinctrl-imx; grep -E "gpioio(2[89]|3[01])" $P/pinmux-pins; grep -E "gpioio(2[89]|3[01])" $P/pinconf-pins
+pin 32 (gpioio28): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+pin 33 (gpioio29): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+pin 34 (gpioio30): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+pin 35 (gpioio31): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+pin 32 (gpioio28): 0xb9e
+pin 33 (gpioio29): 0xb9e
+pin 34 (gpioio30): 0xb9e
+pin 35 (gpioio31): 0xb9e
+
+$ B=/mnt/busybox; for a in 42530000 42540000; do d=/sys/bus/platform/devices/$a.i2c; echo on > $d/power/control; sleep 0.2; echo "$a rpm=$(cat $d/power/runtime_status) VERID $($B devmem 0x$a 32) MCR $($B devmem $((0x$a + 0x10)) 32) MSR $($B devmem $((0x$a + 0x14)) 32) MCFGR1 $($B devmem $((0x$a + 0x24)) 32) MDER $($B devmem $((0x$a + 0x1c)) 32)"; echo auto > $d/power/control; done
+42530000 rpm=active VERID 0x01030003 MCR 0x00000001 MSR 0x01000001 MCFGR1 0x00000000 MDER 0x00000000
+42540000 rpm=active VERID 0x01030003 MCR 0x00000001 MSR 0x01000000 MCFGR1 0x00000000 MDER 0x00000000
+
+$ echo PDIR before unbind $(/mnt/busybox devmem 0x43810050 32)
+PDIR before unbind 0x00130000
+
+$ for a in 42530000 42540000; do echo $a.i2c > /sys/bus/platform/drivers/imx-lpi2c/unbind; done; sleep 0.5; ls /sys/bus/platform/drivers/imx-lpi2c/ | tr "\n" " "; echo; for i in 1 2 3; do echo PDIR after unbind $(/mnt/busybox devmem 0x43810050 32); sleep 0.3; done
+44350000.i2c bind uevent unbind 
+PDIR after unbind 0x00130000
+PDIR after unbind 0x00130000
+PDIR after unbind 0x00130000
+
+$ for a in 42530000 42540000; do echo $a.i2c > /sys/bus/platform/drivers/imx-lpi2c/bind; done; sleep 4; dmesg | tail -n 8
+[  591.723079] fsl-edma 42000000.dma-controller: The srcid is in use, can't use!
+[  591.730245] imx-lpi2c 42530000.i2c: use pio mode
+[  591.735744] pca953x 2-0020: using no AI
+[  592.739679] pca953x 2-0020: failed writing register: -110
+[  592.745234] pca953x 2-0020: probe with driver pca953x failed with error -110
+[  593.753111] tcpci 2-0050: probe with driver tcpci failed with error -110
+[  593.759949] i2c i2c-2: LPI2C adapter registered
+[  593.765169] fsl-edma 42000000.dma-controller: The srcid is in use, can't use!
+[  593.772368] imx-lpi2c 42540000.i2c: use pio mode
+[  593.773355] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  593.777741] pca953x 3-0022: using AI
+[  593.889021] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[  593.913960] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  594.029020] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[  594.791260] pca953x 3-0022: failed writing register: -110
+[  594.796865] pca953x 3-0022: probe with driver pca953x failed with error -110
+[  594.804113] i2c i2c-3: LPI2C adapter registered
+[  594.818231] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  594.933023] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[  593.889021] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[  593.913960] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  594.029020] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[  594.791260] pca953x 3-0022: failed writing register: -110
+[  594.796865] pca953x 3-0022: probe with driver pca953x failed with error -110
+[  594.804113] i2c i2c-3: LPI2C adapter registered
+[  594.818231] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  594.933023] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+
+$ B=/mnt/busybox; a=0x42540000; d=/sys/bus/platform/devices/42540000.i2c; echo on > $d/power/control; sleep 0.2; for o in 0x10 0x14 0x18 0x24 0x28 0x2c 0x48 0x50 0x58 0x5c; do printf "%s=%s " $o $($B devmem $((a + o)) 32); done; echo; echo PDIR $($B devmem 0x43810050 32)
+0x10=0x00000001 0x14=0x01000000 0x18=0x00000000 0x24=0x00000000 0x28=0x02020000 0x2c=0x00000000 0x48=0x0B161622 0x50=0x00000000 0x58=0x00000004 0x5c=0x00000005 
+PDIR 0x00130000
+
+$ B=/mnt/busybox; a=0x42540000; s() { echo "MCR $($B devmem $((a+0x10)) 32) MSR $($B devmem $((a+0x14)) 32) MFSR $($B devmem $((a+0x5c)) 32) PDIR $($B devmem 0x43810050 32)"; }; echo -n "before: "; s; $B devmem $((a+0x10)) 32 0x9; sleep 0.2; echo -n "DBGEN=1: "; s; sleep 1; echo -n "1 s later: "; s
+before: MCR 0x00000001 MSR 0x01000000 MFSR 0x00000005 PDIR 0x00130000
+DBGEN=1: MCR 0x00000009 MSR 0x01000000 MFSR 0x00000005 PDIR 0x00130000
+1 s later: MCR 0x00000009 MSR 0x01000000 MFSR 0x00000005 PDIR 0x00130000
+
+$ B=/mnt/busybox; a=0x42540000; s() { echo "$1: MCR $($B devmem $((a+0x10)) 32) MSR $($B devmem $((a+0x14)) 32) MFSR $($B devmem $((a+0x5c)) 32) PDIR $($B devmem 0x43810050 32)"; }; $B devmem $((a+0x10)) 32 0x302; $B devmem $((a+0x10)) 32 0x0; s reset+disabled; $B devmem $((a+0x14)) 32 0x00003f00; $B devmem $((a+0x10)) 32 0x1; s enabled; $B devmem $((a+0x60)) 32 0x444; $B devmem $((a+0x60)) 32 0x200; s queued; sleep 0.1; s "100 ms"; sleep 1; s "1.1 s"
+reset+disabled: MCR 0x00000000 MSR 0x00000001 MFSR 0x00000000 PDIR 0x00130000
+enabled: MCR 0x00000001 MSR 0x00000001 MFSR 0x00000000 PDIR 0x00130000
+queued: MCR 0x00000001 MSR 0x01000000 MFSR 0x00000001 PDIR 0x00130000
+100 ms: MCR 0x00000001 MSR 0x01000000 MFSR 0x00000001 PDIR 0x00130000
+1.1 s: MCR 0x00000001 MSR 0x01000000 MFSR 0x00000001 PDIR 0x00130000
+
+$ B=/mnt/busybox; for a in 0x42530000 0x42540000; do d=/sys/bus/platform/devices/$(printf %x $a).i2c; echo on > $d/power/control; sleep 0.1; printf "%x: " $a; for o in 0x4 0x20 0x110 0x114 0x118 0x124 0x128 0x140 0x144; do printf "%s=%s " $o $($B devmem $((a + o)) 32); done; echo; done
+42530000: 0x4=0x00000303 0x20=0x00000000 0x110=0x00000000 0x114=0x00000000 0x118=0x00000000 0x124=0x00000000 0x128=0x00000000 0x140=0x00000000 Bus error (core dumped)
+0x144= 
+42540000: 0x4=0x00000303 0x20=0x00000000 0x110=0x00000000 0x114=0x00000000 0x118=0x00000000 0x124=0x00000000 0x128=0x00000000 0x140=0x00000000 Bus error (core dumped)
+0x144= 
+
+i2cget: read failed: Input/output error
+i2c-1 rc=1 t=880.36 from 880.35
+
+i2cget: read failed: Connection timed out
+i2c-3 rc=1 t=881.56 from 880.56
+[  594.804113] i2c i2c-3: LPI2C adapter registered
+[  594.818231] imx95-dpu 4b400000.display-controller: [drm] *ERROR* failed to attach bridge to encoder for stream1: -517
+[  594.933023] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+
+configured: MCR 0x00000000 MSR 0x00000001 MFSR 0x00000000 MCFGR3 0x00010000
+100 ms: MCR 0x00000001 MSR 0x01000001 MFSR 0x00000000 MCFGR3 0x00010000
+600 ms: MCR 0x00000001 MSR 0x01000001 MFSR 0x00000000 MCFGR3 0x00010000
+
+rpm=active
+as found: MCR 0x00000000 MSR 0x00000701 MFSR 0x00000002 MCCR0 0x0C181823 MCFGR2 0x02020000
+100 ms after START+0x45+STOP: MCR 0x00000001 MSR 0x00000800 MFSR 0x00000001 MCCR0 0x00000000 MCFGR2 0x00000000
+

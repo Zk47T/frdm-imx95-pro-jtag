@@ -1,0 +1,431 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x412fd050]
+[    0.000000] Linux version 6.18.20-2.0.0-g5330564085fa-dirty (oe-user@oe-host) (aarch64-poky-linux-gcc (GCC) 15.2.0, GNU ld (GNU Binutils) 2.46) #1 SMP PREEMPT Tue Jun  9 02:25:20 UTC 2026
+[    0.000000] KASLR disabled on command line
+[    0.000000] Machine model: NXP FRDM-IMX95-PRO
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x00000000b4000000, size 960 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000b4000000..0x00000000efffffff (983040 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x00000000a0000000..0x00000000a00fffff (1024 KiB) nomap non-reusable vpu_boot@a0000000
+[    0.000000] OF: reserved mem: 0x0000000088000000..0x0000000088007fff (32 KiB) nomap non-reusable vdev0vring0@88000000
+[    0.000000] OF: reserved mem: 0x0000000088008000..0x000000008800ffff (32 KiB) nomap non-reusable vdev0vring1@88008000
+[    0.000000] OF: reserved mem: 0x0000000088010000..0x0000000088017fff (32 KiB) nomap non-reusable vdev1vring0@88010000
+[    0.000000] OF: reserved mem: 0x0000000088018000..0x000000008801ffff (32 KiB) nomap non-reusable vdev1vring1@88018000
+[    0.000000] OF: reserved mem: 0x0000000088220000..0x0000000088220fff (4 KiB) nomap non-reusable rsc-table@88220000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000088020000, size 1 MiB
+[    0.000000] OF: reserved mem: initialized node vdevbuffer@88020000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000088020000..0x000000008811ffff (1024 KiB) nomap non-reusable vdevbuffer@88020000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000a4120000, size 1 MiB
+[    0.000000] OF: reserved mem: initialized node ele-reserved@a4120000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000a4120000..0x00000000a421ffff (1024 KiB) nomap non-reusable ele-reserved@a4120000
+[    0.000000] OF: reserved mem: 0x00000000f0000000..0x00000000f1ffffff (32768 KiB) nomap non-reusable jtag@f0000000
+[    0.000000] OF: reserved mem: 0x0000000400000000..0x000000047fffffff (2097152 KiB) nomap non-reusable trace@400000000
+[    0.000000] NUMA: Faking a node at [mem 0x0000000090000000-0x000000047fffffff]
+[    0.000000] NODE_DATA(0) allocated [mem 0x3fe4119c0-0x3fe41453f]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000090000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000047fffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000090000000-0x000000009fffffff]
+[    0.000000]   node   0: [mem 0x00000000a0000000-0x00000000a00fffff]
+[    0.000000]   node   0: [mem 0x00000000a0100000-0x00000000a411ffff]
+[    0.000000]   node   0: [mem 0x00000000a4120000-0x00000000a421ffff]
+[    0.000000]   node   0: [mem 0x00000000a4220000-0x00000000efffffff]
+[    0.000000]   node   0: [mem 0x00000000f0000000-0x00000000f1ffffff]
+[    0.000000]   node   0: [mem 0x00000000f2000000-0x00000003ffffffff]
+[    0.000000]   node   0: [mem 0x0000000400000000-0x000000047fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000090000000-0x000000047fffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: MIGRATE_INFO_TYPE not supported.
+[    0.000000] psci: SMC Calling Convention v1.5
+[    0.000000] percpu: Embedded 22 pages/cpu s52120 r8192 d29800 u90112
+[    0.000000] pcpu-alloc: s52120 r8192 d29800 u90112 alloc=22*4096
+[    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 [0] 4 [0] 5 
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] CPU features: detected: GICv3 CPU interface
+[    0.000000] CPU features: detected: Virtualization Host Extensions
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: console=ttyLP0,115200 root=/dev/mmcblk0p2 rootwait rw quiet loglevel=3 systemd.show_status=0 nokaslr cpuidle.off=1
+[    0.000000] printk: log buffer data + meta data: 131072 + 458752 = 589824 bytes
+[    0.000000] Dentry cache hash table entries: 2097152 (order: 12, 16777216 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 1048576 (order: 11, 8388608 bytes, linear)
+[    0.000000] software IO TLB: area num 8.
+[    0.000000] software IO TLB: mapped [mem 0x00000000fbfff000-0x00000000fffff000] (64MB)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 4128768
+[    0.000000] Policy zone: Normal
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=6, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=512 to nr_cpu_ids=6.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=6
+[    0.000000] RCU Tasks: Setting shift to 3 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=6.
+[    0.000000] RCU Tasks Trace: Setting shift to 3 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=6.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for GICv3: non-coherent attribute
+[    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+[    0.000000] GIC: enabling workaround for GICv3: ARM64 erratum 2941627
+[    0.000000] GICv3: 384 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: GICv3 features: 16 PPIs, DirectLPI
+[    0.000000] GICv3: GICD_CTLR.DS=0, SCR_EL3.FIQ=0
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000048060000
+[    0.000000] ITS [mem 0x48040000-0x4805ffff]
+[    0.000000] GIC: enabling workaround for ITS: non-coherent attribute
+[    0.000000] ITS@0x0000000048040000: allocated 8192 Devices @100060000 (indirect, esz 8, psz 64K, shr 0)
+[    0.000000] ITS@0x0000000048040000: allocated 32768 Interrupt Collections @100070000 (flat, esz 2, psz 64K, shr 0)
+[    0.000000] ITS: using cache flushing for cmd queue
+[    0.000000] GICv3: using LPI property table @0x0000000100080000
+[    0.000000] GIC: using cache flushing for LPI property table
+[    0.000000] GICv3: CPU0: using allocated LPI pending table @0x0000000100090000
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer running at 24.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+[    0.000000] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+[    0.000419] Console: colour dummy device 80x25
+[    0.000489] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=96000)
+[    0.000497] pid_max: default: 32768 minimum: 301
+[    0.000569] LSM: initializing lsm=capability
+[    0.000677] Mount-cache hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    0.000701] Mountpoint-cache hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    0.002371] rcu: Hierarchical SRCU implementation.
+[    0.002377] rcu: 	Max phase no-delay instances is 1000.
+[    0.002534] Timer migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.003001] EFI services will not be available.
+[    0.003207] smp: Bringing up secondary CPUs ...
+[    0.003654] Detected VIPT I-cache on CPU1
+[    0.003804] GICv3: CPU1: found redistributor 100 region 0:0x0000000048080000
+[    0.003814] GICv3: CPU1: using allocated LPI pending table @0x00000001000a0000
+[    0.003848] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[    0.004440] Detected VIPT I-cache on CPU2
+[    0.004566] GICv3: CPU2: found redistributor 200 region 0:0x00000000480a0000
+[    0.004574] GICv3: CPU2: using allocated LPI pending table @0x00000001000b0000
+[    0.004598] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[    0.005090] Detected VIPT I-cache on CPU3
+[    0.005210] GICv3: CPU3: found redistributor 300 region 0:0x00000000480c0000
+[    0.005218] GICv3: CPU3: using allocated LPI pending table @0x00000001000c0000
+[    0.005239] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[    0.005725] Detected VIPT I-cache on CPU4
+[    0.005843] GICv3: CPU4: found redistributor 400 region 0:0x00000000480e0000
+[    0.005851] GICv3: CPU4: using allocated LPI pending table @0x00000001000d0000
+[    0.005871] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[    0.006338] Detected VIPT I-cache on CPU5
+[    0.006456] GICv3: CPU5: found redistributor 500 region 0:0x0000000048100000
+[    0.006463] GICv3: CPU5: using allocated LPI pending table @0x00000001000e0000
+[    0.006483] CPU5: Booted secondary processor 0x0000000500 [0x412fd050]
+[    0.006569] smp: Brought up 1 node, 6 CPUs
+[    0.006574] SMP: Total of 6 processors activated.
+[    0.006576] CPU: All CPU(s) started at EL2
+[    0.006579] CPU features: detected: 32-bit EL0 Support
+[    0.006582] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
+[    0.006584] CPU features: detected: Common not Private translations
+[    0.006586] CPU features: detected: CRC32 instructions
+[    0.006591] CPU features: detected: RCpc load-acquire (LDAPR)
+[    0.006594] CPU features: detected: LSE atomic instructions
+[    0.006595] CPU features: detected: Privileged Access Never
+[    0.006597] CPU features: detected: PMUv3
+[    0.006599] CPU features: detected: RAS Extension Support
+[    0.006604] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
+[    0.006643] alternatives: applying system-wide alternatives
+[    0.009621] Memory: 12985204K/16515072K available (18432K kernel code, 1550K rwdata, 6080K rodata, 1792K init, 647K bss, 2540656K reserved, 983040K cma-reserved)
+[    0.012769] devtmpfs: initialized
+[    0.021709] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.021735] posixtimers hash table entries: 4096 (order: 4, 65536 bytes, linear)
+[    0.021817] futex hash table entries: 2048 (131072 bytes on 1 NUMA nodes, total 128 KiB, linear).
+[    0.026411] 25584 pages in range for non-PLT usage
+[    0.026422] 517104 pages in range for PLT usage
+[    0.026615] pinctrl core: initialized pinctrl subsystem
+[    0.028456] DMI not present or invalid.
+[    0.030176] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.030828] DMA: preallocated 2048 KiB GFP_KERNEL pool for atomic allocations
+[    0.031062] DMA: preallocated 2048 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.031319] DMA: preallocated 2048 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.031353] audit: initializing netlink subsys (disabled)
+[    0.031493] audit: type=2000 audit(0.028:1): state=initialized audit_enabled=0 res=1
+[    0.031799] thermal_sys: Registered thermal governor 'step_wise'
+[    0.031803] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.031974] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.032069] ASID allocator initialised with 65536 entries
+[    0.032294] Serial: AMBA PL011 UART driver
+[    0.032356] imx mu driver is registered.
+[    0.032373] imx rpmsg driver is registered.
+[    0.038540] /soc/etm@40840000: Fixed dependency cycle(s) with /soc/funnel
+[    0.038559] /soc/funnel: Fixed dependency cycle(s) with /soc/funnel-sys
+[    0.038567] /soc/funnel: Fixed dependency cycle(s) with /soc/etm@40840000
+[    0.038581] /soc/funnel-sys: Fixed dependency cycle(s) with /soc/etf@41030000
+[    0.038589] /soc/funnel-sys: Fixed dependency cycle(s) with /soc/funnel
+[    0.038601] /soc/etf@41030000: Fixed dependency cycle(s) with /soc/etr@41040000
+[    0.038610] /soc/etf@41030000: Fixed dependency cycle(s) with /soc/funnel-sys
+[    0.038626] /soc/etr@41040000: Fixed dependency cycle(s) with /soc/etf@41030000
+[    0.038665] /soc/bus@42000000/i2c@42530000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.038684] /soc/bus@42000000/i2c@42530000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.038817] /soc/dsi@4acf0000: Fixed dependency cycle(s) with /soc/dsi@4acf0000/bridge@0
+[    0.038831] /soc/dsi@4acf0000: Fixed dependency cycle(s) with /soc/syscon@4b010000/bridge@8
+[    0.038855] /soc/dsi@4acf0000/bridge@0: Fixed dependency cycle(s) with /soc/dsi@4acf0000
+[    0.038863] /soc/dsi@4acf0000/bridge@0: Fixed dependency cycle(s) with /panel-rpi-7inch
+[    0.038967] /soc/syscon@4b010000/bridge@8: Fixed dependency cycle(s) with /soc/dsi@4acf0000
+[    0.038983] /soc/syscon@4b010000/bridge@8: Fixed dependency cycle(s) with /soc/bridge@4b0d0000/channel@1
+[    0.039021] /soc/bridge@4b0d0000/channel@1: Fixed dependency cycle(s) with /soc/syscon@4b010000/bridge@8
+[    0.039035] /soc/bridge@4b0d0000/channel@1: Fixed dependency cycle(s) with /soc/display-controller@4b400000
+[    0.039054] /soc/display-controller@4b400000: Fixed dependency cycle(s) with /soc/bridge@4b0d0000/channel@1
+[    0.039081] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@42530000/tcpc@50
+[    0.039103] /soc/phy@4c1f0040: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@42530000/tcpc@50/connector
+[    0.039357] /soc/etm@40840000: Fixed dependency cycle(s) with /soc/funnel
+[    0.039419] /soc/etm@40840000: Fixed dependency cycle(s) with /soc/funnel
+[    0.039463] /soc/funnel: Fixed dependency cycle(s) with /soc/funnel-sys
+[    0.039472] /soc/funnel: Fixed dependency cycle(s) with /soc/etm@40840000
+[    0.039575] /soc/funnel: Fixed dependency cycle(s) with /soc/funnel-sys
+[    0.039623] /soc/funnel-sys: Fixed dependency cycle(s) with /soc/etf@41030000
+[    0.039632] /soc/funnel-sys: Fixed dependency cycle(s) with /soc/funnel
+[    0.039742] /soc/funnel-sys: Fixed dependency cycle(s) with /soc/etf@41030000
+[    0.039780] /soc/etf@41030000: Fixed dependency cycle(s) with /soc/etr@41040000
+[    0.039790] /soc/etf@41030000: Fixed dependency cycle(s) with /soc/funnel-sys
+[    0.039882] /soc/etf@41030000: Fixed dependency cycle(s) with /soc/etr@41040000
+[    0.039921] /soc/etr@41040000: Fixed dependency cycle(s) with /soc/etf@41030000
+[    0.040091] /soc/bus@42000000/i2c@42530000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.040110] /soc/bus@42000000/i2c@42530000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.040609] /soc/bus@42000000/i2c@42530000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.040628] /soc/bus@42000000/i2c@42530000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.045142] /soc/dsi@4acf0000: Fixed dependency cycle(s) with /soc/dsi@4acf0000/bridge@0
+[    0.045162] /soc/dsi@4acf0000: Fixed dependency cycle(s) with /soc/syscon@4b010000/bridge@8
+[    0.045183] /soc/dsi@4acf0000/bridge@0: Fixed dependency cycle(s) with /soc/dsi@4acf0000
+[    0.045193] /soc/dsi@4acf0000/bridge@0: Fixed dependency cycle(s) with /panel-rpi-7inch
+[    0.045796] /soc/syscon@4b010000/bridge@8: Fixed dependency cycle(s) with /soc/dsi@4acf0000
+[    0.045842] /soc/syscon@4b010000/bridge@8: Fixed dependency cycle(s) with /soc/bridge@4b0d0000/channel@1
+[    0.046176] /soc/bridge@4b0d0000/channel@1: Fixed dependency cycle(s) with /soc/syscon@4b010000/bridge@8
+[    0.046191] /soc/bridge@4b0d0000/channel@1: Fixed dependency cycle(s) with /soc/display-controller@4b400000
+[    0.046285] /soc/bridge@4b0d0000/channel@1: Fixed dependency cycle(s) with /soc/display-controller@4b400000
+[    0.046334] /soc/display-controller@4b400000: Fixed dependency cycle(s) with /soc/bridge@4b0d0000/channel@1
+[    0.046484] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@42530000/tcpc@50
+[    0.046713] /soc/bus@42000000/i2c@42530000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.046755] /soc/phy@4c1f0040: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@42530000/tcpc@50/connector
+[    0.051729] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.051737] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.051740] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+[    0.051742] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+[    0.051745] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.051747] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.051750] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+[    0.051752] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    0.053240] ACPI: Interpreter disabled.
+[    0.053996] iommu: Default domain type: Translated
+[    0.054004] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.054659] SCSI subsystem initialized
+[    0.054763] libata version 3.00 loaded.
+[    0.054946] usbcore: registered new interface driver usbfs
+[    0.054968] usbcore: registered new interface driver hub
+[    0.054988] usbcore: registered new device driver usb
+[    0.055694] pps_core: LinuxPPS API ver. 1 registered
+[    0.055698] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.055706] PTP clock support registered
+[    0.055731] EDAC MC: Ver: 3.0.0
+[    0.055950] scmi_core: SCMI protocol bus registered
+[    0.056247] FPGA manager framework
+[    0.056306] Advanced Linux Sound Architecture Driver Initialized.
+[    0.056833] Bluetooth: Core ver 2.22
+[    0.056853] NET: Registered PF_BLUETOOTH protocol family
+[    0.056855] Bluetooth: HCI device and connection manager initialized
+[    0.056863] Bluetooth: HCI socket layer initialized
+[    0.056867] Bluetooth: L2CAP socket layer initialized
+[    0.056875] Bluetooth: SCO socket layer initialized
+[    0.057179] vgaarb: loaded
+[    0.057669] clocksource: Switched to clocksource arch_sys_counter
+[    0.057879] VFS: Disk quotas dquot_6.6.0
+[    0.057893] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.058272] pnp: PnP ACPI: disabled
+[    0.063119] NET: Registered PF_INET protocol family
+[    0.063356] IP idents hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.069826] tcp_listen_portaddr_hash hash table entries: 8192 (order: 5, 131072 bytes, linear)
+[    0.069943] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.069961] TCP established hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.070428] TCP bind hash table entries: 65536 (order: 9, 2097152 bytes, linear)
+[    0.071484] TCP: Hash tables configured (established 131072 bind 65536)
+[    0.071586] UDP hash table entries: 8192 (order: 7, 524288 bytes, linear)
+[    0.071887] UDP-Lite hash table entries: 8192 (order: 7, 524288 bytes, linear)
+[    0.072318] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.073122] NET: Registered PF_XDP protocol family
+[    0.073139] PCI: CLS 0 bytes, default 64
+[    0.073287] Unpacking initramfs...
+[    0.074136] Initialise system trusted keyrings
+[    0.074339] workingset: timestamp_bits=42 max_order=22 bucket_order=0
+[    0.074699] 9p: Installing v9fs 9p2000 file system support
+[    0.107961] Key type asymmetric registered
+[    0.107972] Asymmetric key parser 'x509' registered
+[    0.108051] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 243)
+[    0.108061] io scheduler mq-deadline registered
+[    0.108064] io scheduler kyber registered
+[    0.108105] io scheduler bfq registered
+[    0.109293] Freeing initrd memory: 1696K
+[    0.111709] ledtrig-cpu: registered to indicate activity on CPUs
+[    0.116203] Bus freq driver module loaded
+[    0.121033] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    0.123722] arm-smmu-v3 490d0000.iommu: ias 40-bit, oas 36-bit (features 0x01f4deaf)
+[    0.124262] arm-smmu-v3 490d0000.iommu: allocated 65536 entries for cmdq
+[    0.124620] arm-smmu-v3 490d0000.iommu: allocated 32768 entries for evtq
+[    0.124626] arm-smmu-v3 490d0000.iommu: 2-level strtab only covers 25/32 bits of SID
+[    0.125240] arm-smmu-v3 490d0000.iommu: msi_domain absent - falling back to wired irqs
+[    0.125958] platform 42210000.dma-controller: Adding to iommu group 0
+[    0.126059] platform 42850000.mmc: Adding to iommu group 1
+[    0.126325] platform 4c200000.usb: Adding to iommu group 2
+[    0.126424] platform 4ab00004.imx95-neutron: Adding to iommu group 3
+[    0.137646] loop: module loaded
+[    0.139040] megasas: 07.734.00.00-rc1
+[    0.141975] MACsec IEEE 802.1AE
+[    0.143956] tun: Universal TUN/TAP device driver, 1.6
+[    0.144551] thunder_xcv, ver 1.0
+[    0.144584] thunder_bgx, ver 1.0
+[    0.144608] nicpf, ver 1.0
+[    0.145524] e1000: Intel(R) PRO/1000 Network Driver
+[    0.145527] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    0.145554] e1000e: Intel(R) PRO/1000 Network Driver
+[    0.145556] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    0.145581] igb: Intel(R) Gigabit Ethernet Network Driver
+[    0.145584] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    0.145611] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    0.145613] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    0.145754] sky2: driver version 1.30
+[    0.146170] usbcore: registered new device driver r8152-cfgselector
+[    0.146201] usbcore: registered new interface driver r8152
+[    0.146623] VFIO - User Level meta-driver version: 0.3
+[    0.148727] usbcore: registered new interface driver uas
+[    0.148761] usbcore: registered new interface driver usb-storage
+[    0.148817] usbcore: registered new interface driver usbserial_generic
+[    0.148831] usbserial: USB Serial support registered for generic
+[    0.148849] usbcore: registered new interface driver ftdi_sio
+[    0.148861] usbserial: USB Serial support registered for FTDI USB Serial Device
+[    0.148885] usbcore: registered new interface driver usb_serial_simple
+[    0.148898] usbserial: USB Serial support registered for carelink
+[    0.148913] usbserial: USB Serial support registered for flashloader
+[    0.148924] usbserial: USB Serial support registered for funsoft
+[    0.148935] usbserial: USB Serial support registered for google
+[    0.148945] usbserial: USB Serial support registered for hp4x
+[    0.148956] usbserial: USB Serial support registered for kaufmann
+[    0.148967] usbserial: USB Serial support registered for libtransistor
+[    0.148978] usbserial: USB Serial support registered for moto_modem
+[    0.148993] usbserial: USB Serial support registered for motorola_tetra
+[    0.149004] usbserial: USB Serial support registered for nokia
+[    0.149015] usbserial: USB Serial support registered for novatel_gps
+[    0.149026] usbserial: USB Serial support registered for owon
+[    0.149037] usbserial: USB Serial support registered for siemens_mpi
+[    0.149048] usbserial: USB Serial support registered for suunto
+[    0.149059] usbserial: USB Serial support registered for vivopay
+[    0.149069] usbserial: USB Serial support registered for zio
+[    0.149099] usbcore: registered new interface driver usb_ehset_test
+[    0.152242] i2c_dev: i2c /dev entries driver
+[    0.155138] Bluetooth: HCI UART driver ver 2.3
+[    0.155146] Bluetooth: HCI UART protocol H4 registered
+[    0.155149] Bluetooth: HCI UART protocol BCSP registered
+[    0.155166] Bluetooth: HCI UART protocol LL registered
+[    0.155168] Bluetooth: HCI UART protocol ATH3K registered
+[    0.155180] Bluetooth: HCI UART protocol Three-wire (H5) registered
+[    0.155252] Bluetooth: HCI UART protocol Broadcom registered
+[    0.155265] Bluetooth: HCI UART protocol QCA registered
+[    0.155622] failed to register cpuidle driver
+[    0.155652] CPUidle PSCI: Failed to create psci-cpuidle device
+[    0.155893] sdhci: Secure Digital Host Controller Interface driver
+[    0.155895] sdhci: Copyright(c) Pierre Ossman
+[    0.156283] Synopsys Designware Multimedia Card Interface Driver
+[    0.156741] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.160399] arm-scmi arm-scmi.0.auto: Using scmi_mailbox_transport
+[    0.160410] arm-scmi arm-scmi.0.auto: SCMI max-rx-timeout: 5000ms / max-msg-size: 104bytes / max-msg: 20
+[    0.160863] arm-scmi arm-scmi.0.auto: SCMI Notifications - Core Enabled.
+[    0.161010] arm-scmi arm-scmi.0.auto: SCMI Protocol v2.1 'NXP:IMX' Firmware version 0x380
+[    0.161097] arm-scmi arm-scmi.0.auto: Enabling SCMI Quirk [quirk_clock_rates_triplet_out_of_spec]
+[    0.164750] scmi-cpufreq scmi_dev.4: failed to register for limits change notifier for domain 8
+[    0.164848] cpu cpu0: EM: invalid power: 0
+[    0.165688] scmi-perf-domain scmi_dev.5: Initialized 13 performance domains
+[    0.190403] scmi_module: Loaded SCMI Vendor Protocol 0x81 - NXP IMX 0
+[    0.190440] arm-scmi arm-scmi.0.auto: NXP SM BBM Version 1.0
+[    0.191967] scmi-imx-bbm-rtc scmi_dev.10: registered as rtc0
+[    0.192622] scmi-imx-bbm-rtc scmi_dev.10: setting system clock to 1970-01-01T00:22:01 UTC (1321)
+[    0.192793] scmi-imx-bbm-key scmi_dev.11: key code is not specified, using default KEY_POWER
+[    0.192897] input: scmi_dev.11 as /devices/platform/firmware:scmi/arm-scmi.0.auto/scmi_dev.11/input/input0
+[    0.193649] scmi_module: Loaded SCMI Vendor Protocol 0x82 - NXP IMX 0
+[    0.193679] arm-scmi arm-scmi.0.auto: NXP SM CPU Protocol Version 1.0
+[    0.193704] arm-scmi arm-scmi.0.auto: i.MX SM MAX CPU: 9 cpus
+[    0.193730] arm-scmi arm-scmi.0.auto: i.MX CPU: name: m33p
+[    0.193753] arm-scmi arm-scmi.0.auto: i.MX CPU: name: m7p
+[    0.193777] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c0
+[    0.193801] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c1
+[    0.193824] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c2
+[    0.193847] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c3
+[    0.193871] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c4
+[    0.193894] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c5
+[    0.193918] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55p
+[    0.194069] scmi_module: Loaded SCMI Vendor Protocol 0x84 - NXP IMX 0
+[    0.194096] arm-scmi arm-scmi.0.auto: NXP SM MISC Version 1.1
+[    0.194120] arm-scmi arm-scmi.0.auto: i.MX MISC NUM DEV CTRL: 7, NUM BRD CTRL: 8,NUM Reason: 32
+[    0.194146] arm-scmi arm-scmi.0.auto: SM Version	= Build 896, Commit 44f76dcb Aug 08 2026 18:25:46
+[    0.194171] arm-scmi arm-scmi.0.auto: Board		= i.MX95 EVK, attr=0x00000000
+[    0.194195] arm-scmi arm-scmi.0.auto: SM Config	= mx95frdm-pro, mSel = 0
+[    0.194294] arm-scmi arm-scmi.0.auto: Protocol 0x84 successfully negotiated version 0x10000
+[    0.194829] scmi-imx-misc-ctrl scmi_dev.14: SYS Boot reason: por, origin: -1, errid: -1
+[    0.194856] scmi-imx-misc-ctrl scmi_dev.14: LM Boot reason: por, origin: -1, errid: -1
+[    0.195008] scmi_module: Loaded SCMI Vendor Protocol 0x80 - NXP IMX 0
+[    0.195034] arm-scmi arm-scmi.0.auto: NXP SM LMM Version 1.1
+[    0.195057] arm-scmi arm-scmi.0.auto: i.MX LMM: 3 Logical Machines
+[    0.195098] arm-scmi arm-scmi.0.auto: Protocol 0x80 successfully negotiated version 0x10000
+[    0.195459] fsl-se secure-enclave-0: INIT_WORK call for i.MX secure-enclave: hsm0.
+[    0.195640] fsl-se secure-enclave-0: assigned reserved memory node ele-reserved@a4120000
+[    0.197942] fsl-se secure-enclave-0: Successfully registered ele-trng
+[    0.197963] fsl-se secure-enclave-0: i.MX secure-enclave: hsm0 interface to firmware, configured.
+[    0.198119] random: crng init done
+[    0.198467] fsl-se secure-enclave-1: i.MX secure-enclave: v2x_dbg0 interface to firmware, configured.
+[    0.198889] fsl-se secure-enclave-2: i.MX secure-enclave: v2x_sv0 interface to firmware, configured.
+[    0.199270] fsl-se secure-enclave-3: i.MX secure-enclave: v2x_she0 interface to firmware, configured.
+[    0.199718] fsl-se secure-enclave-4: i.MX secure-enclave: v2x_sg0 interface to firmware, configured.
+[    0.200148] fsl-se secure-enclave-5: i.MX secure-enclave: v2x_sg1 interface to firmware, configured.
+[    0.200248] SMCCC: SOC_ID: ARCH_SOC_ID not implemented, skipping ....
+[    0.201026] usbcore: registered new interface driver usbhid
+[    0.201030] usbhid: USB HID core driver
+[    0.201816] Internal error: synchronous external abort: 0000000096000010 [#1]  SMP
+[    0.201822] Modules linked in:
+[    0.201832] CPU: 4 UID: 0 PID: 1 Comm: swapper/0 Tainted: G   M                6.18.20-2.0.0-g5330564085fa-dirty #1 PREEMPT 
+[    0.201838] Tainted: [M]=MACHINE_CHECK
+[    0.201840] Hardware name: NXP FRDM-IMX95-PRO (DT)
+[    0.201843] pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+[    0.201847] pc : amba_read_periphid+0xb8/0x218
+[    0.201858] lr : amba_read_periphid+0xa4/0x218
+[    0.201862] sp : ffff800081c4bc50
+[    0.201864] x29: ffff800081c4bc50 x28: ffff800081908094 x27: ffff8000818100ac
+[    0.201870] x26: ffff80008175a940 x25: ffff800081b59000 x24: ffff0000841591e8
+[    0.201876] x23: ffff80008134de48 x22: ffff00008014ca00 x21: ffff800081b098a0
+[    0.201881] x20: ffff000080248800 x19: 0000000000001000 x18: ffff000080006a20
+[    0.201887] x17: 000000000000b000 x16: ffff000080006ab0 x15: ffff8000819da128
+[    0.201892] x14: ffff8000819da000 x13: 0000000000000500 x12: ffff800081ca6000
+[    0.201898] x11: ffff800081ca5000 x10: 0000000000001000 x9 : ffff000011ff8078
+[    0.201903] x8 : 0000000041031000 x7 : ffff800081ea5000 x6 : 0000000000000000
+[    0.201908] x5 : ffff800081ca6000 x4 : ffff800081ca5fe0 x3 : 0000000000000000
+[    0.201914] x2 : 0040000000000001 x1 : 0000000000000000 x0 : ffff800081ca5000
+[    0.201920] Call trace:
+[    0.201922]  amba_read_periphid+0xb8/0x218 (P)
+[    0.201928]  amba_match+0x34/0xc0
+[    0.201933]  __driver_attach+0x28/0x184
+[    0.201940]  bus_for_each_dev+0x7c/0xdc
+[    0.201945]  driver_attach+0x24/0x30
+[    0.201950]  bus_add_driver+0xe4/0x208
+[    0.201954]  driver_register+0x68/0x130
+[    0.201959]  __amba_driver_register+0x24/0x38
+[    0.201964]  arm_mhu_driver_init+0x1c/0x28
+[    0.201971]  do_one_initcall+0x60/0x1d4
+[    0.201977]  kernel_init_freeable+0x248/0x2c4
+[    0.201985]  kernel_init+0x20/0x140
+[    0.201989]  ret_from_fork+0x10/0x20
+[    0.201997] Code: d1008264 52800003 8b040004 52800006 (b9400082) 
+[    0.202001] ---[ end trace 0000000000000000 ]---
+[    0.202008] Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b
+[    0.202012] SMP: stopping secondary CPUs
+[    0.202018] Kernel Offset: disabled
+[    0.202020] CPU features: 0x080000,00008000,48046281,0400720b
+[    0.202023] Memory Limit: none
+[    0.202027] ---[ end Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b ]---

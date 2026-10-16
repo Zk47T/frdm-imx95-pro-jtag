@@ -1,0 +1,112 @@
+--- /dev/ttyACM2 opened 2026-10-16 14:36:11 ---
+[   13.426] 
+[   13.426] U-Boot SPL 2026.04-lf_v2026.04+g6eeef838dac+p0 (Jun 02 2026 - 15:03:39 +0000)
+[   13.426] SYS Boot reason: jtag_sw, origin: -1, errid: -1
+[   13.426] SYS shutdown reason: jtag_sw, origin: -1, errid: -1
+[   13.426] Normal Boot
+[   13.426] Unsupported quickboot device
+[   13.426] QB save failed
+[   13.426] Trying to boot from USB SDP
+[   13.626] UID: cb5ca9b191c14bd9afb4f5e935e2f165
+[   13.626] SDP: initialize...
+[   14.027] SDP: handle requests...
+[   17.032] Downloading file of size 1264640 to 0x90400000... done
+[   17.032] Jumping to header at 0x90400000
+[   17.032] Header Tag is not an IMX image
+[   17.032] Found header at 0x90400000
+[   17.032] NOTICE:  BL31: v2.14.1(release):lf-6.18.20-2.0.0-dirty
+[   17.032] NOTICE:  BL31: Built : 12:42:19, Jun  8 2026
+[   17.633] 
+[   17.633] 
+[   17.633] U-Boot 2026.04-lf_v2026.04+g6eeef838dac+p0 (Jun 02 2026 - 15:03:39 +0000)
+[   17.633] 
+[   17.833] CPU:   NXP i.MX9596 Rev2.0 A55 at 1800 MHz
+[   17.833] CPU:   Extended Industrial temperature grade (-40C to 125C) at 52C
+[   17.833] Model: NXP FRDM-IMX95-PRO board
+[   17.833] DRAM:  15.8 GiB
+[   18.034] pca953x gpio@22: Error reading output register
+[   18.034] BOARD: V3.3(ADC2:2262,ADC3:2239)
+[   18.034] tcpc_init: Can't find device id=0x52
+[   18.034] setup_typec: tcpc portpd init failed, err=-19
+[   18.034] tcpc_init: Can't find device id=0x50
+[   18.034] setup_typec: tcpc init failed, err=-19
+[   18.034] pca953x gpio@20: Error reading output register
+[   18.234] pca953x gpio@22: Error reading output register
+[   18.234] netc_phy_rst lookup gpio@20_1 failed ret = -22
+[   18.435] pca953x gpio@20: Error reading output register
+[   18.635] pca953x gpio@22: Error reading output register
+[   18.635] netc_phy_rst lookup gpio@20_2 failed ret = -22
+[   18.635] cfg name not match mx95evkrpmsg:mx95frdm-pro, ignore
+[   18.635] Core:  277 devices, 33 uclasses, devicetree: separate
+[   18.835] MMC:   FSL_SDHC: 0, FSL_SDHC: 1
+[   18.835] Loading Environment from nowhere... OK
+[   18.835] In:    serial
+[   18.835] Out:   serial
+[   18.835] Err:   serial
+[   18.835] LM Boot reason: jtag_sw, origin: -1, errid: -1
+[   18.836] LM shutdown reason: jtag_sw, origin: -1, errid: -1
+[   18.836] 
+[   18.836] BuildInfo:
+[   18.836]   - SM firmware Build 896, Commit 44f76dcb, Aug 08 2026 18:25:46
+[   18.836]   - ELE firmware version 2.0.6-9a9290a
+[   18.836] 
+[   18.836] MMC: no card present
+[   18.836] UID: cb5ca9b191c14bd9afb4f5e935e2f165
+[   18.836] Detect USB boot. Will enter fastboot mode!
+[   18.836] Net:   eth0: enetc-0 [PRIME], eth1: enetc-1
+[   18.836] Fastboot: Normal
+[   18.836] Unsupported quickboot device
+[   18.836] Boot from USB for mfgtools
+[   18.836] *** Warning - Use default environment for 				 mfgtools
+[   18.836] , using default environment
+[   18.836] 
+[   18.836] Run bootcmd_mfg: run mfgtool_args; if iminfo ${initrd_addr}; then if test ${tee} = yes; then bootm ${tee_addr} ${initrd_addr} ${fdt_addr}; else ${kboot} ${loadaddr} ${initrd_addr} ${fdt_addr}; fi; else echo Run fastboot ...; ${fb_cmd}; fi;
+[   18.836] [2KHit any key to stop autoboot: 0
+[   18.836] 
+[   18.836] ## Checking Image at 93800000 ...
+[   18.836] Unknown image format!
+[   18.836] Run fastboot ...
+[   19.036] fastboot_add: cdev: 0x00000000fdef9bd0
+[   19.637] fastboot_set_alt: func: f_fastboot intf: 0 alt: 0
+[   19.637] UID: cb5ca9b191c14bd9afb4f5e935e2f165
+[   19.637] Detect USB boot. Will enter fastboot mode!
+[   19.637] flash target is MMC:1
+[   19.637] MMC: no card present
+[   19.637] MMC card init failed!
+[   19.637] MMC: no card present
+[   19.637] ** Block device MMC 1 not supported
+[   19.637] Detect USB boot. Will enter fastboot mode!
+[   19.637] flash target is MMC:0
+[   19.838] switch to partitions #0, OK
+[   19.838] mmc0(part 0) is current device
+[   19.838] Detect USB boot. Will enter fastboot mode!
+[   19.838] RAMBOOT_FASTBOOT_READY
+[   19.838] Detect USB boot. Will enter fastboot mode!
+[   55.906] Detect USB boot. Will enter fastboot mode!
+[   55.906] Starting download of 28654080 bytes
+[   56.306] ..........................................................................
+[   56.707] ..........................................................................
+[   57.107] ......................................................................
+[   57.107] downloading of 28654080 bytes finished
+[   57.107] Detect USB boot. Will enter fastboot mode!
+[   57.107] Starting download of 97930 bytes
+[   57.107] 
+[   57.107] downloading of 97930 bytes finished
+[   57.107] Detect USB boot. Will enter fastboot mode!
+[   57.107] Starting download of 1736841 bytes
+[   57.307] .............
+[   57.307] downloading of 1736841 bytes finished
+[   57.307] Detect USB boot. Will enter fastboot mode!
+[   57.307] ## Flattened Device Tree blob at 93000000
+[   57.307]    Booting using the fdt blob at 0x93000000
+[   57.307] Working FDT set to 93000000
+[   57.307]    Loading Device Tree to 000000009ffe5000, end 000000009ffffe89 ... OK
+[   57.307] Working FDT set to 9ffe5000
+[   57.307] 
+[   57.307] Starting kernel ...
+[   57.307] 
+[   84.755] P+q6E616D65\[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J]3008;start=7283147defe34a61a4797f85788afb96;user=root;hostname=imx95-19x19-lpddr5-frdm-pro;machineid=7a297c7e66f64543912fd2e4177168ff;bootid=339a321a42544316890487ed06894780;pid=1;pidfdid=2;comm=systemd;type=boot\[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;start=b73d3fed759143e28747c880b011a8f2;user=root;hostname=imx95-19x19-lpddr5-frdm-pro;machineid=7a297c7e66f64543912fd2e4177168ff;bootid=339a321a42544316890487ed06894780;pid=665;pidfdid=666;comm=(agetty);servicename=serial-getty@ttyLP0.service;invocationid=5334359f556a42c3bc438d3a0f73cd84;type=service\P+q6E616D65\
+[   84.755] NXP i.MX Release Distro (fast-boot eglfs) 6.18-wrynose imx95-19x19-lpddr5-frdm-pro ttyLP0
+[   84.755] 
+[   84.755] Type 'root' to login with superuser privileges (no password will be asked).
+[   84.755] 
