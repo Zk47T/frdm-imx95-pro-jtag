@@ -1,0 +1,18 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-09-30-12:07)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+Info : CH347 SWD mode enabled
+adapter speed: 1000 kHz
+adapter speed: 5000 kHz
+cs_trace_stop
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 5000 kHz
+Info : SWD DPIDR 0x6ba02477
+Warn : gdb services need one or more targets defined
+0
+SW-DP DPIDR 0x6ba02477 (ARM's DPs end in 477)
+DP CTRL/STAT 0xf0000041: CDBGPWRUPACK 1, CSYSPWRUPACK 1, STICKYERR 0
+AP 0 IDR 0x84770001 a MEM-AP: the normal SWJ-DP
+AP 1 IDR 0x54770002 a MEM-AP: the normal SWJ-DP
+shutdown command invoked
