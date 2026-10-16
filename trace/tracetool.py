@@ -327,7 +327,7 @@ def cmd_nav(a):
                 text = open(os.path.join(KSRC, fn), errors='replace').read().split('\n')[int(no) - 1].strip()
             except (OSError, ValueError, IndexError):
                 pass
-        print('#%-11d t=%.3f us  EL%d  %s+%#x  %#x: %s' % (i, ix.t_ns(i) / 1000.0, el, ix.name(f),
+        print('#%-11d t=%.3f us  EL%d  %s+%#x  %#x: %s' % (i, (ix.t_ns(i) - t_base) / 1000.0, el, ix.name(f),
                                                             pc - _fstart(f, pc), pc, _fmt(ins)))
         if line:
             print('             %s   %s' % (line, text))
@@ -368,6 +368,7 @@ def cmd_nav(a):
         for n, (f, e) in enumerate(out):
             print('  #%-2d %-40s entered at instruction #%d' % (n, ix.name(f), int(cum[e])))
 
+    t_base = ix.t_ns(base)               # times are shown from the start of the recording
     total = int(r[-1, 3] + r[-1, 2])
     cur = max(base, min(int(a.n) if a.n is not None else base, total - 1))
     print('recorded: instructions #%d .. #%d; commands: s/b [N] step fwd/back, n/p next/prev range, '
@@ -383,6 +384,16 @@ def cmd_nav(a):
         op, arg = c[0], c[1] if len(c) > 1 else None
         if op == 'q':
             break
+        if op in ('h', 'help', '?'):
+            print('  s [N] / b [N]   step forward / back N instructions (default 1)\n'
+                  '  n / p           next / previous executed range (a straight-line block)\n'
+                  '  f / F           forward to the next call or return / back to before this call\n'
+                  '  find NAME       forward to the next entry into a function (substring match)\n'
+                  '  rfind NAME      back to the previous entry into a function\n'
+                  '  g N             go to instruction #N\n'
+                  '  bt              call stack here, with the instruction where each frame began\n'
+                  '  q               quit')
+            continue
         if op in ('s', 'b'):
             cur += (1 if op == 's' else -1) * int(arg or 1)
         elif op in ('n', 'p'):
@@ -416,8 +427,21 @@ def cmd_nav(a):
         show(cur)
 
 
+EXAMPLES = '''
+examples (from trace/; ss-t5-cc has timestamps + cycle counts, the most accurate):
+  ./tracetool.py nav ss-t5-cc              step through the history (type h for the commands)
+  ./tracetool.py perfetto ss-t5-cc         then open ss-t5-cc/trace.perfetto.json in ui.perfetto.dev
+  ./tracetool.py speedscope ss-t5-cc       then open ss-t5-cc/trace.speedscope.json in speedscope.app
+  xdg-open ss-t5-cc/flamegraph.svg         the flame graph (any browser)
+  ./tracetool.py index ss-t3-start --count 3000000    a new snapshot: index it first (3 M instructions)
+'''
+
+
 def main():
-    ap = argparse.ArgumentParser()
+    if len(sys.argv) == 1:
+        print(__doc__ + EXAMPLES)
+        sys.exit(0)
+    ap = argparse.ArgumentParser(epilog=EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest='cmd', required=True)
     p = sp.add_parser('index'); p.add_argument('snap'); p.add_argument('--from', dest='start', type=int, default=0)
     p.add_argument('--count', type=int, default=0, help='instructions to keep (0 = all)')
