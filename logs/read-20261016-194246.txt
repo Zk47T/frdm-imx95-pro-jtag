@@ -1,0 +1,24 @@
+Open On-Chip Debugger 0.12.0+dev-02711-g21f88d781 (2026-10-15-16:13)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+Info : CH347 SWD mode enabled
+adapter speed: 5000 kHz
+1
+Info : [imx95.a55.0] Hardware thread awareness created
+cs_multi_stop
+Info : CH347 UART+SPI+I2C+JTAG from vendor wch.cn with serial number BD5AEAABCD found. (Chip version=1.20, Firmware=0x42)
+Info : clock speed 5000 kHz
+Info : SWD DPIDR 0x6ba02477
+Info : [imx95.ahb] gdb port disabled
+Info : [imx95.apb] gdb port disabled
+Info : [imx95.a55.0] starting gdb server on 3333
+Info : Listening on port 3333 for gdb connections
+Info : [imx95.m7] starting gdb server on 3334
+Info : Listening on port 3334 for gdb connections
+Info : [imx95.m33] starting gdb server on 3335
+Info : Listening on port 3335 for gdb connections
+0
+memory bus access delay set to 2 tck
+dumped 18886656 bytes in 68.845001s (267.906 KiB/s)
+shutdown command invoked

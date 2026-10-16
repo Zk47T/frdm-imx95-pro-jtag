@@ -9,7 +9,8 @@ trace/*.bin
 trace/ss-*/*.bin
 # regenerable trace views (tracetool.py index/perfetto/speedscope); the flame graph and folded stacks are kept
 trace/ss-*/index.npz
-trace/ss-*/trace.perfetto.json
+trace/ss-*/*.perfetto.json
+trace/ss-*/*.perfetto-trace
 trace/ss-*/trace.speedscope.json
 # NXP documents (UM12527, FRDMIMX95PROQSG): not redistributed here; download them from nxp.com
 frmd-imx95-pro/*.pdf

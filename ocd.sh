@@ -12,6 +12,9 @@
 #   ocd.sh pcs [CORE] [N]    after authentication: N samples of an A55's PC without halting it
 #   ocd.sh etm-ids [CORE]    OS-unlock an A55's ETM and print its ID registers (for the trace decoder)
 #   ocd.sh trace CORE BASE SIZE MS   ETM -> ETF -> ETR trace into DRAM (docs/04)
+#   ocd.sh trace-all BASE SIZE MS [CONFIGR]   all six A55s into one buffer (docs/04 §7, §8)
+#   ocd.sh read BASE SIZE FILE         memory into FILE over SWD at 5 MHz (276 KiB/s): trace readout
+#   ocd.sh ktext [FILE]                the running kernel's text, for mksnap.py --kernel-live
 # DBG0=0x... ocd.sh ...      another A55 debug base (default 0x80810000, measured 2026-10-16)
 # SWD=1 ocd.sh ...           SWD instead of JTAG (SWDIO = TMS, SWCLK = TCK; TDO is then free
 #                            for SWO). Not for 'scan'.
@@ -77,7 +80,30 @@ trace)
 	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c "etm_ids ${2:-0}" \
 	    -c "cs_trace_start ${2:-0} ${3:-0xf1000000} ${4:-0x1000000}" -c "sleep ${5:-300}" \
 	    -c "cs_trace_stop ${2:-0}" -c shutdown ;;
+trace-all)
+	# trace-all BASE SIZE MS [CONFIGR]: all six A55s, trace ID 0x10 + core, stopped at the sink so
+	# that every core ends at the same instant (docs/04 §7). CONFIGR 0x8880 (default): timestamps and
+	# the PID (CONTEXTIDR_EL2, traced as the VMID); 0x800: timestamps only
+	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' \
+	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880}" -c "sleep ${4:-1500}" \
+	    -c 'cs_multi_stop {0 1 2 3 4 5}' -c shutdown ;;
+read)
+	# read BASE SIZE FILE: through the AHB-AP, SWD at 5 MHz with 2 idle clocks per access: the
+	# CH347F's fastest path (docs/07), in the ocd-fast build
+	[ -n "$4" ] || { echo "read BASE SIZE FILE"; exit 2; }
+	(cd "$H" && "$R/11.tmp/ocd-fast-build/src/openocd" -s "$R/11.tmp/ocd-fast/tcl" -s "$H" \
+	    -c 'adapter driver ch347' -c 'adapter usb vid_pid 0x1a86 0x55dd 0x1a86 0x55de' -c 'transport select swd' \
+	    -c 'adapter speed 5000' -c 'set IMX95_A55 1' -f imx95-pro.cfg -f imx95-jtag.tcl -c 'catch init' \
+	    -c 'imx95.ahb arp_examine' -c 'imx95.dap apsel 0' -c 'imx95.dap memaccess 2' -c 'targets imx95.ahb' \
+	    -c "dump_image $4 $2 $3" -c shutdown) 2>&1 | tee "$LOG" ;;
+ktext)
+	# ktext [FILE]: the kernel text as it runs, for the trace decoder. Linux patches its text at boot
+	# (alternatives, LSE atomics, static keys: 0.4 % of the words here); decoded against vmlinux, the
+	# trace loses returns. KTEXT_PA: /proc/iomem 'Kernel code' (nokaslr: fixed for this kernel)
+	KB=${KB:-/home/zk47/Learning/yocto-imx95-pro/frdm-imx95-pro/tmp/work/imx95_19x19_lpddr5_frdm_pro-poky-linux/linux-imx/6.18.20+git/build}
+	SZ=$(aarch64-linux-gnu-readelf -lW "$KB/vmlinux" | awk '/LOAD/ {print $5; exit}')
+	exec "$0" read "${KTEXT_PA:-0x90400000}" "$SZ" "${2:-trace/ktext-live-$(date +%Y%m%d).bin}" ;;
 *)
-	sed -n '2,18p' "$0"; exit 2 ;;
+	sed -n '2,21p' "$0"; exit 2 ;;
 esac
 echo "log: $LOG"

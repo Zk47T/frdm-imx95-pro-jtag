@@ -59,6 +59,10 @@ def main():
     ap.add_argument('--elf', action='append', default=[])
     ap.add_argument('--cores', default='0', help='traced cores, e.g. 0,1,2,3 (trace id 0x10 + core when more than one)')
     ap.add_argument('--out', required=True)
+    ap.add_argument('--pids', help="'PID NAME' lines collected on the board while tracing (/proc/*/comm): "
+                    'kept as pids.txt, tracetool names the tasks with it')
+    ap.add_argument('--kernel-live', help='the running kernel text (physical _text, length of the first '
+                    'vmlinux segment), read from DRAM: ocd.sh ktext')
     a = ap.parse_args()
     cores = [int(c) for c in a.cores.split(',')]
     os.makedirs(a.out, exist_ok=True)
@@ -87,13 +91,27 @@ def main():
         raw = open(elf, 'rb').read()
         for i, (o, va, sz) in enumerate(exec_segments(elf)):
             name = '%s_%d.bin' % (os.path.basename(elf), i)
-            open(os.path.join(a.out, name), 'wb').write(raw[o:o + sz])
+            img = raw[o:o + sz]
+            if elf == KB + '/vmlinux' and i == 0 and a.kernel_live:
+                # the kernel text as it runs: Linux patches itself at boot (alternatives, LSE atomics,
+                # static keys: 0.4 % of the words, in 7,000 functions, here). Decoding against the
+                # file follows branches that are NOPs now and loses returns (call stacks 500 deep).
+                live = open(a.kernel_live, 'rb').read()
+                if len(live) != sz:
+                    sys.exit('%s: %d bytes, the text segment is %d' % (a.kernel_live, len(live), sz))
+                print('kernel text: the live copy %s (%d words differ from vmlinux)' % (
+                    a.kernel_live, sum(1 for j in range(0, sz, 4) if live[j:j + 4] != img[j:j + 4])))
+                img = live
+            open(os.path.join(a.out, name), 'wb').write(img)
             dumps.append((name, va, sz))
     for c in cores:
         with open(os.path.join(a.out, 'cpu_%d.ini' % c), 'w') as f:
             f.write('[device]\nname=cpu_%d\nclass=core\ntype=Cortex-A55\n\n[regs]\nPC(size:64)=0\n' % c)
             for i, (name, va, sz) in enumerate(dumps):
                 f.write('\n[dump%d]\nfile=%s\naddress=0x%X\nlength=0x%X\nspace=ANY\n' % (i + 1, name, va, sz))
+    if a.pids:
+        with open(os.path.join(a.out, 'pids.txt'), 'w') as f:
+            f.writelines(l for l in open(a.pids) if re.match(r'\d+ \S', l))
     devs = ''.join('device%d=cpu_%d.ini\ndevice%d=etm_%d.ini\n' % (2 * i, c, 2 * i + 1, c) for i, c in enumerate(cores))
     open(os.path.join(a.out, 'snapshot.ini'), 'w').write(
         '[snapshot]\nversion=1.0\ndescription=i.MX95 A55 cores %s ETMv4 -> ETF -> ETR, read over JTAG\n\n'
