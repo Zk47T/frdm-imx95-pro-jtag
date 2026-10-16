@@ -1,83 +1,58 @@
-# JTAG on the FRDM-IMX95-PRO with the CH347F
+# JTAG, trace and board debugging on the FRDM-IMX95-PRO (CH347F)
 
-**What this is:** the kit and the plan for debugging NXP's FRDM-IMX95-PRO (i.MX 9596, six Cortex-A55, M7, M33) through its JTAG test points. The probe is the same CH347F + OpenOCD we use on the T113.
+NXP FRDM-IMX95-PRO: i.MX 9596 (six Cortex-A55, M7, M33), 16 GB LPDDR5. The kit debugs it through the
+JTAG test points with a CH347F and OpenOCD, the same probe as the T113 work. It also covers Linux
+without a console, ARM instruction trace into DRAM, and the board's DSI/I2C fault.
+A local git repository (2026-10-16); its history starts with the import from elb1 `ed4a0fa`.
 
-**Status (2026-10-16, afternoon):** **reworked by the owner, not yet run.**
-- **The rework** ([`rework-20261016.jpg`](rework-20261016.jpg)): thin blue fly wires soldered at the test-point corner between the microSD slot and the USB-A port, sleeved in heat-shrink, ending in female Dupont plugs tagged with tape ("GND", "TMS", "TP…" readable; the others face away).
-- **Not known yet:** option A or B of §2, whether the M.2 Wi-Fi/BT card is in, which plug goes to which TP. Ask the owner (§0 step 1).
-- **Nothing has been powered, metered or scanned yet.**
-- **The CH347F** was on the LCPI-PC (T113) until today. On 2026-10-16 at 13:38 it re-enumerated several times on a hub port (3-6.4) while being moved. Check where it is before starting (§10).
-- This kit stays a separate track from the T113 work.
-- **Prepared** from the board's design files, the i.MX95 reference manual (ch. 14) and NXP's SPSDK:
-  - the rework;
-  - the OpenOCD config and procedures;
-  - the debug-mailbox code;
-  - two Linux DTBs.
-- **Checked on the PC only:**
-  - everything parses in our OpenOCD build (dummy adapter);
-  - the mailbox code, run against a Tcl mock of the device, sends exactly the words SPSDK sends.
-- **Hardware:** the rework was done on 2026-10-16 (photo above). Still to learn from the owner: option A or B of §2, whether the M.2 card is in, and which wire goes to which TP. Nothing has been measured.
+## Status, 2026-10-16 evening
 
-**The one open question:** this part is in the open life cycle (LC 0x40010, SRK hash all zero). Does it open debug with a plain `START_DBG_SESSION` (0x07) through the debug mailbox, or does it need a signed authentication (DAT)? Step 6 answers it.
+| | | |
+|---|---|---|
+| JTAG | works: 0 Ω links fitted on R104/R125/R132/R135; clean to 15 MHz; **debug open in serial download**, no mailbox needed | [01](docs/01-jtag-bringup.md) `[V]` |
+| A55 | halted and resumed in U-Boot; debug base `0x80810000`; PC sampling (PMPCSR) while running | [01](docs/01-jtag-bringup.md), [02](docs/02-linux-without-a-console.md) `[V]` |
+| Reset from afar | MDM-AP `JTAG_SW_RST` (full SoC reset) or the SM monitor `reset` | [01](docs/01-jtag-bringup.md) §5 `[V]` |
+| Linux without flashing | U-Boot over SDP, then the DSI kernel + a JTAG DTB + an initramfs from RAM; eMMC untouched | [02](docs/02-linux-without-a-console.md) `[V]` |
+| Shell over JTAG | RTT console works; **one board hang while it was in use, open** | [02](docs/02-linux-without-a-console.md) §4 `[V]` `[?]` |
+| **ARM trace** | **ETM → ETF → ETR into a 2 GB DRAM buffer, 1.58 GiB in 8 s; decoded with OpenCSD, 0 errors; instruction count matches the code to 1 in 3,074**; Linux's own CoreSight driver panics this BSP | [04](docs/04-arm-trace-into-dram.md) `[V]` |
+| **DSI** | dark because the panel's 3.3 V needs U17 (PCAL6524, I2C4), and **no device on I2C3 or I2C4 answers**; the SoC side of both buses is proven healthy; the 2026-09-15 "lines held low" was a measurement artefact | [03](docs/03-dsi-and-the-i2c-fault.md) `[V]` |
+| Next for the owner | meter checks in [03](docs/03-dsi-and-the-i2c-fault.md) §6; option: fit R75 + R194 to power the panel without U17 | |
 
----
+**Where the hardware was left:**
+- the CH347F wired to this board (the T113 labs have no JTAG meanwhile);
+- the debug USB in; SW4 on serial download;
+- Linux running from RAM with the i2c-gpio DTB.
 
-## 0. Start here (the next session)
+**For normal boots:** SW4 x,OFF,ON,OFF.
 
-### Starting from the Yocto repo
-
-The owner opens this session in `/home/zk47/Learning/yocto-imx95-pro`. That directory has its own Claude memory, which knows nothing of the elb1 work, so what that session needs is here.
+## Documents
 
 | | |
 |---|---|
-| **This kit** | `./jtag/` there, a symlink to `/home/zk47/Project/5.elb1-t113/16.frdm-imx95-pro-jtag`. `./jtag/ocd.sh STAGE` works from either place (absolute paths inside) and logs to `jtag/logs/` |
-| **OpenOCD, the CH347 config, the link test** | all in the elb1 repo: `11.tmp/openocd-build/src/openocd`, `6.host-tools/jtag-ch347/ch347.cfg`, `6.host-tools/jtag-ch347/jtag-linktest.py` |
-| **Docs and commits** | go to the **elb1 repo**, not the Yocto tree: `git -C /home/zk47/Project/5.elb1-t113 …` |
-| **Commit rules** | area commits on `main`, identity `git -c user.email=zizuzacker@gmail.com commit`, trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`, then push. Never add `.vscode/`, `ProLib_*`, `tmp-docx`, `7.Hardware-design/9.Snail-Pi/` or `4.docs/4.slide-ref/` |
-| **Another session pushes to `main` too** | run `git fetch` before pushing. On 2026-10-16 one session rebased and force-pushed over a merge the other had pulled. If what you pulled is no longer in `origin/main`, compare the replaced commits, keep a backup branch, `git reset --keep origin/main`, cherry-pick your own commits. **Never force-push** |
-| **sudo** | needed for `usbreset` and udev rules: ask the owner for it, and never write it into a file |
-| **Upstream** | paused (owner, 2026-10-08): no patches or mails |
-| **How the owner likes the work** | decide technical approaches yourself and report after; claim only what was measured (`[V]` / `[?]`); docs course-style (behaviour, checks, fix, lessons) |
+| [01 JTAG bring-up](docs/01-jtag-bringup.md) | rework, link, debug port, A55 base, halt, the APB-AP trap, resets |
+| [02 Linux without a console](docs/02-linux-without-a-console.md) | boot from RAM, shell over JTAG, dmesg and PC sampling from outside, UART map, the SM monitor |
+| [03 DSI and the I2C fault](docs/03-dsi-and-the-i2c-fault.md) | the probe chain, 17 checks, the correction, meter checks, workarounds |
+| [04 ARM trace into DRAM](docs/04-arm-trace-into-dram.md) | ETM/ETF/ETR from the debugger, 2 GB buffer, decode, four cross-checks |
+| [05 i.MX95 vs T113-S3](docs/05-imx95-vs-t113.md) | what this debug path gives that the T113 can't; SDP vs FEL |
+| [06 Tools and rules](docs/06-tools-and-rules.md) | every script; a session start to finish; the rules |
+| [`frmd-imx95-pro/`](frmd-imx95-pro/pictures/README.md) | UM12527, QSG, NXP design files, annotated pictures (the netlist, BOM and pictures used above) |
 
-### The plan, in order
+Tags in all documents: `[V]` measured, `[?]` not verified, `[R]` from the design files or reference manual.
 
-| # | Do | Section | Done when |
-|---|---|---|---|
-| 1 | Ask the owner what was reworked (links fitted, or the 49.9 Ω parts moved; M.2 card in or out) and how the CH347F is wired | 2 | the wiring table below matches the board |
-| 2 | Meter checks, board unpowered: TP4–TP7 not 0 Ω (TCK not shorted), no two neighbouring TPs shorted. Then powered: TP6 = 3.3 V | 2 | |
-| 3 | Board to the U-Boot prompt: `ub2.py version` | 3 | `u-boot=>` on `/dev/ttyACM0` |
-| 3b | **Link test, before any data is trusted:** `6.host-tools/jtag-ch347/jtag-linktest.py --chip imx95 469 938 1875 3750 7500` | 10 | the highest clock with 0 errors at every lower one; use it as `JTAG_KHZ` |
-| 4 | `JTAG_KHZ=… ./ocd.sh scan`: one TAP, the JTAGC IDCODE and the JTAG-DP IDCODE (…477) | 4 | both IDCODEs read |
-| 5 | `./ocd.sh dp`: which debug port answers | 5 | AP 0's IDR known |
-| 6 | `./ocd.sh dm`; if the resync times out, set the JTAG DTB as default, then `./ocd.sh dm-reset` | 6 | the answer to the open question |
-| 7 | If debug opened: `./ocd.sh a55` (check `DBG0`), then `server` + gdb, `mdm`, `pcs` | 7, 9 | core 0 halted and resumed |
-| 8 | If refused (`0x00100002`): `./ocd.sh dac`, save the challenge, **stop and ask the owner** (a signed DAT needs keys) | 6 | |
-| 9 | Write it up: a course-style status doc, this README's status, the memory note | 12 | pushed |
+## Corrections to the plan below (written 2026-10-15, before the board was run)
 
-### Rules for this board
-- **Nothing may write fuses or the life cycle.**
-  - `imx95-jtag.tcl` sends only five mailbox commands (`dm_allowed`: START, GET_CRP_LEVEL, EXIT, START_DBG_SESSION, DBG_AUTH_START) and refuses the rest. Don't widen that list.
-  - Don't run SPSDK commands that program or provision anything.
-- **Don't run U-Boot's `qb save`/`qb check`**, and never from `bootcmd`. They touch NPU SRAM that isn't powered at U-Boot time; doing it from `bootcmd` has bricked this board into a reset loop before. Recovery for that is `scripts/recover.sh` (SDP).
-- **The CH347F belongs to the LCPI-PC too.** Moving its wires to this board means the T113 labs have no JTAG until they go back. Note in the status doc which board it was left on.
-- **Upstream work is paused** (owner, 2026-10-08): no patches or mails from this.
-
-### Where things are
-
-| What | Where |
+| The plan said | Measured |
 |---|---|
-| This kit | `16.frdm-imx95-pro-jtag/` (`/home/zk47/Learning/yocto-imx95-pro/jtag` is a symlink to it) |
-| Design files (schematic, netlist, layout, Gerbers, BOM) | `4.docs/1.manual/frmd-imx95-pro/FRDM-IMX95-PRO-DESIGNFILES/` |
-| **Annotated pictures** (rework spots, test points, power, buttons, debug UARTs) | [`4.docs/1.manual/frmd-imx95-pro/pictures/`](../4.docs/1.manual/frmd-imx95-pro/pictures/README.md) |
-| The Pro's Yocto tree and its helper scripts (`ub2.py`, `b.sh`, `post_recover.sh`, `recover.sh`, `smmon.py`) | `/home/zk47/Learning/yocto-imx95-pro/sources/meta-fastboot-imx95/scripts/`; board notes in `/home/zk47/Learning/yocto-imx95-pro/handoff/PRO.md` |
-| i.MX95 RM, system debug chapter (text) | `/home/zk47/Learning/yocto-imx95/0.documentation/rm/p00-general/ch014-system-debug.md` |
-| The June attempt on the non-Pro FRDM-IMX95 (J-Link clone; notes, configs) | `/home/zk47/Learning/yocto-imx95/jtag/` (`jtag-note`) |
-| NXP SPSDK (the mailbox protocol's source, `spsdk/dat/`) | `~/.local/pipx/venvs/spsdk` |
-| NXP forum threads (the owner's "JTAG on FRDM iMX95", the solved thread 2386639, J-Link on FRDM-IMX93) | `4.docs/1.manual/jlink-imx93/` |
-| OpenOCD with the CH347 driver | `11.tmp/openocd-build/src/openocd`, scripts `1.repo/3.other/openocd/tcl` (`ocd.sh` finds both) |
-| CH347 setup, udev rules, quirks | [`6.host-tools/jtag-ch347/README.md`](../6.host-tools/jtag-ch347/README.md) |
+| A55 debug base 0x40810000 (RM Table 76) | **0x80810000** as the APB-AP sees it; `imx95-pro.cfg` default changed |
+| `ocd.sh a55` runs `dap info 1` | removed: in SDP it wedges the APB-AP |
+| the debug mailbox (§6) may be needed | not on this part: the normal DP answers in SDP |
+| `ttyACM0` = A55, `ttyACM1` = SM | only if the board's debug USB is plugged in first; here ttyACM2/3 |
+| trace through the Linux CoreSight driver (§8) | the driver's first ETF read aborts and kills init; trace from the debugger instead |
+| docs and commits go to the elb1 repo | this directory is now its own git repository (owner, 2026-10-16) |
 
 ---
+
+# Appendix: the plan of 2026-10-15, as written
 
 ## 1. What we know about the board's debug port
 
