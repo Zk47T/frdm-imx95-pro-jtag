@@ -11,3 +11,5 @@ trace/ss-*/*.bin
 trace/ss-*/index.npz
 trace/ss-*/trace.perfetto.json
 trace/ss-*/trace.speedscope.json
+# NXP documents (UM12527, FRDMIMX95PROQSG): not redistributed here; download them from nxp.com
+frmd-imx95-pro/*.pdf
