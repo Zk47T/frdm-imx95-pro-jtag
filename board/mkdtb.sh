@@ -44,8 +44,47 @@ def set_status(name, val):
     s = s[:a] + new + s[b:]
 
 set_status('serial@42590000', 'disabled')
-for n in ('etm@40840000', 'funnel', 'funnel-sys', 'etf@41030000', 'etr@41040000'):
-    set_status(n, 'okay')
+import os
+if os.environ.get('TRACE') == '1':
+    # 2026-10-16: with these on, Linux panics at 0.2 s: a synchronous external abort reading
+    # the ETF's PIDR (0x41030FE0) in amba_read_periphid. Off by default until that is solved.
+    for n in ('etm@40840000', 'funnel', 'funnel-sys', 'etf@41030000', 'etr@41040000'):
+        set_status(n, 'okay')
+
+if os.environ.get('I2CGPIO') == '1':
+    # 2026-10-16: LPI2C3 and LPI2C4 (WAKEUPMIX) never get past a START (master busy, FIFO
+    # stuck, no NACK, no pin-low timeout) while the lines idle high as GPIOs. Run both buses
+    # as i2c-gpio on the same pads to see whether the devices behind them answer.
+    # GPIO2 (phandle 0x35): IO28 = I2C3 SDA, IO29 = I2C3 SCL, IO30 = I2C4 SDA, IO31 = I2C4 SCL.
+    a2, b2 = node_span('lpi2c4grp')
+    ind4 = '\t\t\t\t'
+    grp = ''
+    gph = ph            # the trace buffer keeps ph; the groups take the next two
+    for name, regs in (('i2c3gpiogrp', (0x80, 0x284, 0x84, 0x288)), ('i2c4gpiogrp', (0x88, 0x28c, 0x8c, 0x290))):
+        gph += 1
+        grp += ('\n%s%s {\n%s\tfsl,pins = <%#x %#x 0x00 0x00 0x00 0xb9e %#x %#x 0x00 0x00 0x00 0xb9e>;\n'
+                '%s\tphandle = <%#x>;\n%s};\n' % (ind4, name, ind4, regs[0], regs[1], regs[2], regs[3], ind4, gph, ind4))
+        globals()[name] = gph
+    end = s.index('\n' + ind4 + '};', a2) + len('\n' + ind4 + '};')
+    s = s[:end] + '\n' + grp + s[end:]
+    for node, sda, scl, g in (('i2c@42530000', 28, 29, i2c3gpiogrp), ('i2c@42540000', 30, 31, i2c4gpiogrp)):
+        a, b = node_span(node)
+        body = s[a:b]
+        own = '\t\t\t\t'
+        keep = []
+        for line in body.split('\n'):
+            p = line[len(own):] if line.startswith(own) and not line.startswith(own + '\t') else None
+            if p and re.match(r'(reg|interrupts|clocks|clock-names|dmas|dma-names|clock-frequency|power-domains) =', p):
+                continue
+            if p and p.startswith('compatible ='):
+                line = own + 'compatible = "i2c-gpio";'
+            if p and p.startswith('pinctrl-0 ='):
+                line = own + 'pinctrl-0 = <%#x>;' % g
+            keep.append(line)
+        body = '\n'.join(keep)
+        body = (own + 'sda-gpios = <0x35 %d 0x02>;\n' % sda + own + 'scl-gpios = <0x35 %d 0x02>;\n' % scl +
+                own + 'i2c-gpio,delay-us = <0x05>;\n') + body
+        s = s[:a] + body + s[b:]
 
 a, b = node_span('reserved-memory')
 ind = '\t\t'
@@ -54,7 +93,8 @@ s = s[:b] + ('\n%sjtag@f0000000 {\n%s\treg = <0x00 0xf0000000 0x00 0x2000000>;\n
              % (ind, ind, ind, ind, ind, ind, ind, ind, ph, ind)) + s[b:]
 
 a, b = node_span('etr@41040000')
-s = s[:a] + '\t\t\tmemory-region = <%#x>;\n\t\t\tmemory-region-names = "tracedata";\n' % ph + s[a:]
+if os.environ.get('TRACE') == '1':
+  s = s[:a] + '\t\t\tmemory-region = <%#x>;\n\t\t\tmemory-region-names = "tracedata";\n' % ph + s[a:]
 open(sys.argv[2], 'w').write(s)
 print('trace buffer phandle %#x' % ph)
 EOF
