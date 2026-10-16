@@ -44,6 +44,9 @@ Tested on 2026-10-16 with OpenOCD from git (`0.12.0+dev-02711`), with Linux runn
    gdb-multiarch vmlinux -ex 'target extended-remote :3333'      # info threads: one per A55
    arm-none-eabi-gdb m7.elf -ex 'target extended-remote :3334'   # the M7
    ```
+   - **Port 3333 debugs the A55 cores themselves** (stop mode): U-Boot, the kernel, drivers, at any exception level. Halting a core stops everything on it.
+   - **A Linux user program is a job for `gdbserver` on the board:** its addresses mean something only while that process runs on that core.
+   - **The M7's firmware has no processes:** there, debugging the core is debugging the application.
    An IDE that can use an external GDB server can use the same ports, for example VS Code Cortex-Debug (`servertype: external`) or an Eclipse "GDB Hardware Debugging" launch in MCUXpresso. Not tried here.
 
 ## Other probes, other boards
