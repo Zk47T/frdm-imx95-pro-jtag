@@ -1,0 +1,12 @@
+AHB-AP reads of 0x40000 bytes at 0xfff00000, twice per configuration (Thứ sáu, 16 Tháng 10 năm 2026 17:51:44 +07)
+ref            jtag   1875 kHz  memaccess 255        15 KiB/s  OK
+jtag-7500      jtag   7500 kHz  memaccess 255        15 KiB/s  OK
+jtag-15000     jtag  15000 kHz  memaccess 255        15 KiB/s  OK
+jtag-30000     jtag  30000 kHz  memaccess 255        15 KiB/s  OK
+jtag-60000     jtag  60000 kHz  memaccess 255        16 KiB/s  OK
+jtag-30M-m8    jtag  30000 kHz  memaccess 8         107 KiB/s  OK
+jtag-30M-m0    jtag  30000 kHz  memaccess 0          27 KiB/s  OK
+jtag-60M-m8    jtag  60000 kHz  memaccess 8         110 KiB/s  OK
+swd-1M         swd    1000 kHz  memaccess 255        12 KiB/s  OK
+swd-5M         swd    5000 kHz  memaccess 255        48 KiB/s  OK
+swd-5M-m8      swd    5000 kHz  memaccess 8         246 KiB/s  OK

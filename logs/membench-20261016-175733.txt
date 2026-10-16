@@ -1,0 +1,7 @@
+AHB-AP reads of 0x40000 bytes at 0xfff00000, twice per configuration, /home/zk47/Project/5.elb1-t113/11.tmp/ocd-fast-build/src/openocd (Thứ sáu, 16 Tháng 10 năm 2026 17:57:33 +07)
+ref            jtag   1875 kHz  memaccess 255        19 KiB/s  OK
+swd-5M-m8      swd    5000 kHz  memaccess 8         245 KiB/s  OK
+swd-5M-m4      swd    5000 kHz  memaccess 4         262 KiB/s  OK
+swd-5M-m2      swd    5000 kHz  memaccess 2         276 KiB/s  OK
+swd-5M-m1      swd    5000 kHz  memaccess 1           - KiB/s  FAILED (Error: Failed to read memory at 0xfff00fdc)
+swd-5M-m0      swd    5000 kHz  memaccess 0           - KiB/s  FAILED (Error: Failed to read memory at 0xfff00fac)
