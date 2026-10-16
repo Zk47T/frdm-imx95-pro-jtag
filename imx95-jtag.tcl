@@ -427,15 +427,28 @@ proc cs_etm_stop {core} {
 	cs_wait [expr {$e + 0x00c}] 0x1 0x1
 }
 
-# Flush the ETF and the ETR (stop on flush); returns the ETR's state.
-proc cs_sink_stop {} {
-	set r $::cs_etr; set f $::cs_etf
-	cs_w [expr {$f + 0x304}] [expr {[cs_r [expr {$f + 0x304}]] | 0x40}]
-	cs_wait [expr {$f + 0x304}] 0x40 0x0
-	cs_w [expr {$f + 0x20}] 0
+# Stop the ETR on a flush (FFCR FlushMan|StopOnFl): the flush goes up through the ETF and the
+# funnels to every ETM, and the ETR stops writing once it completes. That ends every core's trace
+# at one instant. After it the ETR drops what still arrives without stalling the ATB: the ETMs ran
+# on for 40 s, RWP didn't move, and each still reached idle (2026-10-16, T7). No-op if stopped.
+proc cs_etr_flushstop {} {
+	set r $::cs_etr
+	if {[cs_r [expr {$r + 0x0c}]] & 0x4} { return }
 	cs_w [expr {$r + 0x304}] [expr {[cs_r [expr {$r + 0x304}]] | 0x1040}]
 	cs_wait [expr {$r + 0x304}] 0x40 0x0
 	cs_wait [expr {$r + 0x0c}] 0x4 0x4
+}
+
+# Flush the ETF and the ETR (stop on flush), switch both off; returns the ETR's state. If the ETR
+# has already stopped, the ETF's leftovers would be dropped anyway: it is only switched off.
+proc cs_sink_stop {} {
+	set r $::cs_etr; set f $::cs_etf
+	if {!([cs_r [expr {$r + 0x0c}]] & 0x4)} {
+		cs_w [expr {$f + 0x304}] [expr {[cs_r [expr {$f + 0x304}]] | 0x40}]
+		cs_wait [expr {$f + 0x304}] 0x40 0x0
+	}
+	cs_w [expr {$f + 0x20}] 0
+	cs_etr_flushstop
 	set sts [cs_r [expr {$r + 0x0c}]]
 	set rwp [expr {([cs_r [expr {$r + 0x3c}]] << 32) | [cs_r [expr {$r + 0x18}]]}]
 	set rrp [expr {([cs_r [expr {$r + 0x38}]] << 32) | [cs_r [expr {$r + 0x14}]]}]
@@ -452,8 +465,7 @@ proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
 	echo [format "cs: tracing core %d, trace id %#x, into %#x + %#x; ETR STS %#x" $core $traceid $base $size [cs_r [expr {$::cs_etr + 0x0c}]]]
 }
 proc cs_trace_stop {core} {
-	cs_etm_stop $core
-	return [cs_sink_stop]
+	return [cs_multi_stop [list $core]]
 }
 
 # Several cores into the same buffer: core n gets trace id 0x10 + n (the funnels merge them).
@@ -463,7 +475,12 @@ proc cs_multi_start {cores base size {configr 0x0} {ccctlr 0x0}} {
 	foreach c $cores { cs_etm_start $c [expr {0x10 + $c}] $configr $ccctlr }
 	echo [format "cs: tracing cores {%s} (trace ids 0x10 + core) into %#x + %#x" $cores $base $size]
 }
+# The sink first, then the ETMs. Each cs_etm_stop takes ~1.8 ms over the CH347F: stopped first and
+# one by one (T6), the cores still running went on filling the ring, and core 0's trace ended
+# 7.7 ms before core 4's. With the ETR stopped first, every core ends at the same timestamp (T7).
+# (The start is still one core after another, ~ms apart; a ring that has wrapped doesn't show it.)
 proc cs_multi_stop {cores} {
+	cs_etr_flushstop
 	foreach c $cores { cs_etm_stop $c }
 	return [cs_sink_stop]
 }
