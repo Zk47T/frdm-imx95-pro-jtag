@@ -7,3 +7,7 @@ frmd-imx95-pro/FRDM-IMX95-PRO-DESIGNFILES.zip
 # trace buffers and snapshot memory images (MBs each; regenerate with ocd.sh trace + trace/mksnap.py)
 trace/*.bin
 trace/ss-*/*.bin
+# regenerable trace views (tracetool.py index/perfetto/speedscope); the flame graph and folded stacks are kept
+trace/ss-*/index.npz
+trace/ss-*/trace.perfetto.json
+trace/ss-*/trace.speedscope.json
