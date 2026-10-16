@@ -19,7 +19,10 @@ KIMG=${KIMG:-$D/Image}
 DTB=${DTB:-$H/board/out/imx95-19x19-frdm-pro-rpi-7inch-panel-jtag.dtb}
 INITRD=${INITRD:-$H/board/out/initramfs.cpio.gz}
 INITRD_ADDR=0x96000000
-ARGS="console=ttyLP0,115200 root=/dev/mmcblk0p2 rootwait rw quiet loglevel=3 systemd.show_status=0 nokaslr cpuidle.off=1 ${EXTRA_BOOTARGS:-}"
+# VERBOSE=1: every kernel message on the console (ttyLP0 = the A55 UART), for a hang that leaves
+# no time to read the log any other way
+if [ -n "$VERBOSE" ]; then Q="loglevel=7 ignore_loglevel"; else Q="quiet loglevel=3 systemd.show_status=0"; fi
+ARGS="console=ttyLP0,115200 root=/dev/mmcblk0p2 rootwait rw $Q nokaslr cpuidle.off=1 ${EXTRA_BOOTARGS:-}"
 export SUDO_ASKPASS=$S/askpass.sh
 [ -n "$SUDO_PASS" ] || { echo "SUDO_PASS is needed (uuu runs as root)"; exit 2; }
 lsusb | grep -q '1fc9:0152' || { echo "no U-Boot fastboot gadget (1fc9:0152): SDP boot + 'uuu ramboot.lst' first"; exit 1; }
