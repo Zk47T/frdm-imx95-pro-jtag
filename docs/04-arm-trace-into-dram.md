@@ -134,6 +134,32 @@ T3's start and end windows give the same profile to 0.01 %.
 - **Linux's own driver:** find what fences the A55's view of `0x41030000` (TRDC / SM configuration), then `TRACE=1`. `[?]`
 - **When the trace is idle:** a core in WFI produces nothing (T1). Trace a workload, or switch the idle loop off with `cpuidle.off=1`, which only keeps the core powered, not busy.
 
+## 8. All six cores at once (2026-10-16 evening) `[V]`
+
+`cs_multi_start {0 1 2 3 4 5} BASE SIZE CONFIGR` (`imx95-jtag.tcl`) starts the sink once, then each core's ETM with trace ID 0x10 + core. The fixed funnels merge them into the one ETR buffer.
+- All six ETMs answered with identical ID registers. The cores must be powered (`cpuidle.off=1`).
+- `mksnap.py --cores 0,1,2,3,4,5` writes one cpu/etm pair per core. `tracetool.py` keeps one call stack per trace ID and writes one Perfetto track per core.
+
+Capture T6: 8 MB, TS on (TRCCONFIGR 0x800), 300 ms, one job pinned per core:
+
+| Core | Job | Instructions in the buffer | What the decode shows | Overflows |
+|---|---|---|---|---|
+| 0 | `dd if=/dev/zero` | 8.4 M | `__arch_clear_user` | 0 |
+| 1 | `dd if=/dev/urandom` | 15.5 M | `chacha_permute`, `chacha_block_generic` | 0 |
+| 2 | `head -c ... /dev/zero \| md5sum` | 15.1 M | `md5_process_block64`, `getc`/`putchar` | **7** |
+| 3 | `head ... \| gzip -1` | 18.1 M | `deflate`, `fill_window`, `crc32` | **7** |
+| 4 | a shell loop | 16.7 M | `evaltree`, `evalcommand`, `argstr` (busybox ash) | 0 |
+| 5 | idle | 0.13 M | idle entry/exit; 5× TRACE_ON after WFI | 0 |
+
+- **Every core's trace matches the job pinned to it.** In Perfetto (trace processor: 0 import errors), the busy cores' windows overlap at about 0.55–1.2 ms on the shared timestamps. The idle core's part of the buffer reaches 12 ms back, because it writes so little.
+- **Five busy cores are too much for the shared path:**
+  - The two with the densest user-space branching (cores 2 and 3) lost trace 7 times each (`NO_SYNC`/`TRACE_ON [overflow]`). The decoder resynchronises, and their call stacks start again after each gap.
+  - **Fixes:**
+    - fewer cores;
+    - address filters;
+    - **ETM stall** (TRCSTALLCTLR, supported here: TRCIDR3 bit 26). That makes a core wait instead of dropping trace, at the cost of its timing.
+- `tracetool.py index --count N` caps each core at N instructions (1 M here: 26 s, ~119 k slices).
+
 ## 7. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known

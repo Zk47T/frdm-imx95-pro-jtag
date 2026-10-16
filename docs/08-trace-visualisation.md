@@ -30,7 +30,15 @@ trace/tracetool.py index      call stack rebuilt from the decoded control flow  
 - OpenCSD says how each executed range ended: `b+link` (BL/BLR) is a call, `A64:ret` a return, anything else a jump.
 - A call pushes and a return pops. A jump into another function replaces the top, because it's a tail call.
 - An exception pushes a marker and the vector code; the exception return pops back to the marker.
-- **Checked against the known path** (16 levels, user → syscall → kernel):
+- **Perfetto output:**
+- **Begin/End events in call order**, one track per core with `tid = 10 + core`.
+- **Times on an integer-ns grid** from the earliest instruction.
+- **Two traps found with Perfetto's trace processor:**
+  - complete (X) events at absolute times near 1.8×10⁹ µs rounded a parent's end past its tail-called child's start;
+  - `tid 0` is taken as the process's main thread and merged core 0 into core 1.
+  - Both gave `misplaced_end_event` import errors. All files now import with 0 errors. `[V]`
+
+**Checked against the known path** (16 levels, user → syscall → kernel):
 
 ```
 dd_main → dd_read → safe_read → read            (busybox, EL0)
@@ -98,14 +106,14 @@ TRACE32 is ahead in **analysis software**, not in access: on this chip it reads 
 | trace listing with source, back and forth | `tracetool nav` (text) | a GUI pane synced with the timeline |
 | function timing, nesting, statistics | Perfetto, speedscope, folded/flame graph | per-function min/max/avg tables (from `index.npz`) |
 | CTS: registers and variables at past points | — (no data trace) | re-execute from a snapshot: halt at the start (registers + memory windows), then emulate (e.g. Unicorn) along the traced path, checking every branch against the trace |
-| multicore time correlation | core 0 only | ETMs of cores 1–5 with their own trace IDs; one Perfetto track per core, aligned on the common timestamps |
+| multicore time correlation | **done**: six cores, one Perfetto track each, aligned on the common timestamps ([04](04-arm-trace-into-dram.md) §8) | cycle counts on all cores at once (bandwidth: use filters or stall) |
 | code coverage | — | mark every executed range against `vmlinux`'s functions/lines |
 | OS awareness (tasks) | — | Context ID tracing (TRCCONFIGR.CID) gives the PID per range; map it to `comm` |
 | triggers, filters | — | address-range include/exclude (TRCVIIECTLR + TRCACVRn), start/stop on an address |
 
 **Practical order:**
 1. CID tracing and per-process tracks.
-2. All six cores.
+2. ~~All six cores~~ (done).
 3. Address filters to record one subsystem across a boot (e.g. the DSI/ATTINY probe).
 4. Then the emulation-based register view, if it's still wanted.
 

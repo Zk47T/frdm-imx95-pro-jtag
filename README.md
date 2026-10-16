@@ -18,7 +18,7 @@ A local git repository (2026-10-16); its history starts with the import from elb
 | **DSI** | dark because the panel's 3.3 V needs U17 (PCAL6524, I2C4), and **no device on I2C3 or I2C4 answers**; the SoC side of both buses is proven healthy; the 2026-09-15 "lines held low" was a measurement artefact | [03](docs/03-dsi-and-the-i2c-fault.md) `[V]` |
 | Probe | CH347F clean to **60 MHz** JTAG; SWD works; best bulk read **276 KiB/s (SWD 5 MHz, memaccess 2)**; JTAG capped ~105 KiB/s by the chip's bit mode | [07](docs/07-ch347f-m7-and-other-probes.md) `[V]` |
 | M7 | examined, halted, resumed and debugged with gdb through OpenOCD's port 3334, over the same JTAG; usable from MCUXpresso/VS Code as a GDB server | [07](docs/07-ch347f-m7-and-other-probes.md) §2 `[V]` |
-| Trace views | call stack rebuilt from the trace; Perfetto timeline, speedscope, cycle-weighted flame graph, and a navigator that steps forward and back with source; **timestamps (6.144 G/s) and cycle counts (1.807 GHz) verified** | [08](docs/08-trace-visualisation.md) `[V]` |
+| Trace views | **all six A55 cores at once** (one Perfetto track each; overflow when 5 are busy); call stack rebuilt from the trace; Perfetto timeline, speedscope, cycle-weighted flame graph, and a navigator that steps forward and back with source; **timestamps (6.144 G/s) and cycle counts (1.807 GHz) verified** | [08](docs/08-trace-visualisation.md) `[V]` |
 | Next for the owner | meter checks in [03](docs/03-dsi-and-the-i2c-fault.md) §6; option: fit R75 + R194 to power the panel without U17; CH347F I2C on J6 to probe U17 directly ([07](docs/07-ch347f-m7-and-other-probes.md) §1) | |
 
 **Where the hardware was left:**
