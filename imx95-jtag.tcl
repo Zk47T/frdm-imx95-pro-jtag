@@ -369,7 +369,7 @@ proc etm_ids {core} {
 
 # Start: ETR circular buffer at base (64-bit physical, its own AXI master: not behind the SMMU,
 # no iommus in the DT) of size bytes; ETF as a hardware FIFO link; then the ETM.
-proc cs_trace_start {core base size {traceid 0x10} {configr 0x0}} {
+proc cs_trace_start {core base size {traceid 0x10} {configr 0x0} {ccctlr 0x0}} {
 	set r $::cs_etr; set f $::cs_etf; set e [etm_base $core]
 	foreach b [list $r $f $e] { cs_w [expr {$b + 0xfb0}] $::cs_lock }
 	# ETR (sink)
@@ -408,7 +408,7 @@ proc cs_trace_start {core base size {traceid 0x10} {configr 0x0}} {
 	cs_w [expr {$e + 0x02c}] 0
 	cs_w [expr {$e + 0x030}] 0
 	cs_w [expr {$e + 0x034}] 0xc
-	cs_w [expr {$e + 0x038}] 0
+	cs_w [expr {$e + 0x038}] $ccctlr
 	cs_w [expr {$e + 0x03c}] 0
 	cs_w [expr {$e + 0x040}] $traceid
 	cs_w [expr {$e + 0x080}] 0x201
