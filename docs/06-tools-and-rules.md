@@ -23,6 +23,7 @@
 | `trace/capture.sh NAME SECS [CMD]` | a whole-system trace in one command: trace-all while CMD runs on the board, PID map, USB readout with SHA-256 check, snapshot, summary |
 | `trace/jtagtop.py SAMPLES` | the report for `ocd.sh top`: per core the busy share and tasks, the busiest tasks and functions; `--tty` or `--pids` for names, `--elf` for user code |
 | `trace/usbget.sh OUT` | on the PC: read that disk into OUT, with its speed and SHA-256 |
+| `board/i2cblk.c` | a tiny `/dev/i2c-*` SMBus helper (scan, block read); cross-compiled and pushed, for [09](09-detecting-a-kernel-fix.md) |
 | `board/i2cbang.sh SDA SCL ADDR` | one I2C address probe clocked by hand through GPIO2, printing every pin state |
 | `trace/mksnap.py` | OpenCSD snapshot + decode + per-function instruction counts; `--cores`, `--kernel-live`, `--pids` |
 | `trace/tracetool.py` | index (per core, per task), Perfetto (protobuf or JSON), speedscope, folded stacks, `nav`; `--window`; `summary` and `cut` for captures too big to index |
