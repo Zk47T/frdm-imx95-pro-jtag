@@ -328,6 +328,27 @@ proc a55_pcs {{core 0} {n 2000}} {
 	}
 }
 
+# A whole-system profile through JTAG alone: no trace buffer, nothing on the board, any length.
+# The PMU's PC sample block, read at +0x220 (measured 2026-10-17 on a busy loop pinned to core 2):
+#   0x220 PMPCSR[31:0]: a read takes a new sample   0x224 PMPCSR[63:32]: NS (bit 31), EL (bits 30:29)
+#   0x228 PMCID1SR: CONTEXTIDR_EL1 (0 under VHE)    0x22c PMCID2SR: CONTEXTIDR_EL2, the PID on this kernel
+# One 4-word read per core gives a PC and the PID of the same instant, without halting anything.
+# 'core lo hi pid' lines into FILE for trace/jtagtop.py. The cores must be powered (cpuidle.off=1).
+proc a55_top_samples {cores secs file} {
+	set f [open $file w]
+	set t0 [clock milliseconds]
+	set n 0
+	while {[clock milliseconds] - $t0 < $secs * 1000} {
+		foreach c $cores {
+			set v [imx95.apb read_memory [expr {$::_DBG0 + $c * 0x100000 + 0x20220}] 32 4]
+			puts $f "$c [lindex $v 0] [lindex $v 1] [lindex $v 3]"
+			incr n
+		}
+	}
+	close $f
+	echo [format "a55_top: %d samples of cores {%s} in %d ms -> %s" $n $cores [expr {[clock milliseconds] - $t0}] $file]
+}
+
 # --- trace through the debugger: core n's ETM -> funnels -> ETF (FIFO) -> ETR -> DRAM -------
 # (2026-10-16) Linux can't do this here: its first read of the ETF's PIDR (0x41030FE0, the A55's
 # path) takes a synchronous external abort and kills init. The debugger's APB-AP reaches the same

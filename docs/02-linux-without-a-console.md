@@ -51,6 +51,49 @@ scripts/ramboot.lst via uuu                 -> U-Boot from RAM, fastboot gadget 
 - The A55 is ARMv8.2, so the sample is PMPCSR in the PMU block (debug base + 0x20000, offsets 0x200/0x204); EDPCSR is not implemented (EDDEVID.PCSample = 0).
 - It gave the panic location, and later the `dd` profile that cross-checks the trace.
 
+### 3.1 A whole-system `top` through JTAG alone (2026-10-17) `[V]`
+
+**The PMU's sample block also captures the context IDs, at the same instant as the PC.** Read at +0x220, measured with a busy loop pinned to core 2:
+
+| Offset | Register | Here |
+|---|---|---|
+| 0x220 / 0x224 | PMPCSR | a read of 0x220 takes a new sample; 0x224 bit 31 = NS, bits 30:29 = the EL |
+| 0x228 | PMCID1SR, CONTEXTIDR_EL1 | 0 (VHE) |
+| 0x22c | **PMCID2SR, CONTEXTIDR_EL2** | **the PID** (`CONFIG_PID_IN_CONTEXTIDR`): 0x8cb = 2251, the busy loop |
+
+**`ocd.sh top [SECS]`:**
+- One 4-word read per core, round-robin over the six A55s (`a55_top_samples`), then `trace/jtagtop.py`: the busy share and tasks per core, then the busiest tasks and functions.
+- Nothing runs on the board and no core stops. Any length works: no trace buffer, no readout.
+- About **100 samples per second per core** at 30 MHz JTAG.
+- **Names:**
+  - `TOP_TTY=/dev/ttyACM2` asks the console for `/proc/PID/comm` of the PIDs still alive, 40 a command: one 1.4 KB command line came back empty.
+  - `jtagtop.py --pids` takes the scenario's PID map, which also has the short-lived processes.
+  - `TOP_ELF=` names user code of a static program.
+
+**Checks:**
+- **A busy loop pinned to core 2:** 507 of 507 samples on core 2 were PID 2251, in BusyBox ash's own functions (`evalcommand`, `expandarg`, `evaltree`). The other cores were idle, apart from the RTT console on core 0.
+- **The real scenario** ([04](04-arm-trace-into-dram.md) §8), 6 s, 3,636 samples:
+
+```
+core  busy   tasks (share of all samples on that core)
+   0  21.6 %  systemd [1] 7.3 %, sha256sum 3.5 %, kworker/0:1H-mmc_complete 2.3 %, dbus-daemon 0.7 %
+   1  25.6 %  sha256sum 10.2 %, systemd-udevd 4.6 %, systemd [1] 1.3 %, sh, (udev-worker)
+   2  20.1 %  sh 1.7 %, sha256sum 1.5 %, (udev-worker) 1.0 %, ...
+   3  40.1 %  sha256sum [2276] 20.6 %, sh 2.3 %, systemd [1] 1.3 %, dbus-daemon, systemd-udevd
+   4  27.7 %  udevadm 9.6 %, sha256sum 2.3 %, systemd-udevd, (udev-worker)
+   5  23.9 %  sha256sum [2309] 8.1 %, sha256sum 1.5 %, find 1.3 %, (udev-worker)
+```
+
+The same picture as the trace's time per task (T10, T11), from a different mechanism.
+
+**Trace or sampling:**
+
+| | The trace | Sampling |
+|---|---|---|
+| Gives | every instruction and call stack, in a window | where the time goes, statistically |
+| Needs | a buffer, a readout and a decode | none of those |
+| Fits | an exact path | a quick "what is this board doing" |
+
 ## 4. Open: the board hangs while the JTAG console is in use `[V]` `[?]`
 
 **Seen once:**

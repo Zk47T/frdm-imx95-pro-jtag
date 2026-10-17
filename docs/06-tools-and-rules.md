@@ -5,7 +5,7 @@
 | File | What it does |
 |---|---|
 | `openocd/` | stand-alone OpenOCD files for others: `target/imx95.cfg`, `interface/ch347.cfg`, `board/nxp_frdm-imx95-pro.cfg` ([README](../openocd/README.md)) |
-| `ocd.sh STAGE` | one OpenOCD run per stage: `scan`, `dp`, `dm`, `dm-reset`, `dac`, `a55`, `server`, `mdm`, `pcs`, `etm-ids`, `trace CORE BASE SIZE MS`, `trace-all BASE SIZE MS [CONFIGR]`, `read BASE SIZE FILE` (SWD, 276 KiB/s), `ktext` (the live kernel text); `JTAG_KHZ=`, `SWD=1`, `DBG0=`; logs in `logs/` |
+| `ocd.sh STAGE` | one OpenOCD run per stage: `scan`, `dp`, `dm`, `dm-reset`, `dac`, `a55`, `server`, `mdm`, `pcs`, `etm-ids`, `trace CORE BASE SIZE MS`, `trace-all BASE SIZE MS [CONFIGR]`, `read BASE SIZE FILE` (SWD, 276 KiB/s), `ktext` (the live kernel text), `top [SECS]` (PC + PID sampling of all A55s); `JTAG_KHZ=`, `SWD=1`, `DBG0=`; logs in `logs/` |
 | `imx95-pro.cfg` | the DAP, and with `IMX95_A55` the AHB-AP/APB-AP memory targets, six A55s (SMP, hwthread), the M7 and the M33; A55 debug base `0x80810000` |
 | `imx95-jtag.tcl` | IDCODEs, DP state, the debug mailbox (allow-listed commands only), MDM-AP, PC sampling, `etm_ids`, `cs_trace_start` / `cs_trace_stop`, `cs_multi_start` / `cs_multi_stop` (all cores; the stop is at the sink) |
 | `console.sh start\|stop` | one long-running OpenOCD: RTT shell on `:9090`, Tcl RPC on `:6666` |
@@ -20,6 +20,7 @@
 | `board/physwin.c` | copy, read, write or checksum physical memory through `/dev/mem` (no-map regions only) |
 | `board/scenario-real.sh [done]` | real work for a trace on the board's own image (sha256sum over `/usr`, udevadm, journalctl, systemctl), a PID map and `/proc/interrupts` before and after |
 | `board/usbexport.sh PHYS LEN \| stop` | on the board (`/mnt`): a trace buffer as a read-only USB disk on the board's USB-C (41 MiB/s) |
+| `trace/jtagtop.py SAMPLES` | the report for `ocd.sh top`: per core the busy share and tasks, the busiest tasks and functions; `--tty` or `--pids` for names, `--elf` for user code |
 | `trace/usbget.sh OUT` | on the PC: read that disk into OUT, with its speed and SHA-256 |
 | `board/i2cbang.sh SDA SCL ADDR` | one I2C address probe clocked by hand through GPIO2, printing every pin state |
 | `trace/mksnap.py` | OpenCSD snapshot + decode + per-function instruction counts; `--cores`, `--kernel-live`, `--pids` |

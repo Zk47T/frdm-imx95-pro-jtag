@@ -13,6 +13,8 @@
 #   ocd.sh etm-ids [CORE]    OS-unlock an A55's ETM and print its ID registers (for the trace decoder)
 #   ocd.sh trace CORE BASE SIZE MS   ETM -> ETF -> ETR trace into DRAM (docs/04)
 #   ocd.sh trace-all BASE SIZE MS [CONFIGR]   all six A55s into one buffer, kernel only (docs/04 §7, §8)
+#   ocd.sh top [SECS] [CORES]          a whole-system profile through JTAG alone: PC + PID samples
+#                                      of every A55, nothing halted (TOP_TTY=/dev/ttyACM2 for names)
 #   ocd.sh read BASE SIZE FILE         memory into FILE over SWD at 5 MHz (276 KiB/s): trace readout
 #   ocd.sh ktext [FILE]                the running kernel's text, for mksnap.py --kernel-live
 # DBG0=0x... ocd.sh ...      another A55 debug base (default 0x80810000, measured 2026-10-16)
@@ -92,6 +94,13 @@ trace-all)
 	    -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' \
 	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880}" -c "sleep ${4:-1500}" \
 	    -c 'cs_multi_stop {0 1 2 3 4 5}' -c shutdown ;;
+top)
+	# top [SECS] [CORES]: each core's PC sample register with CONTEXTIDR_EL2 (the PID) of the same
+	# instant, round-robin for SECS s at 30 MHz, then trace/jtagtop.py (imx95-jtag.tcl a55_top_samples)
+	OUT="$H/logs/top-$(date +%Y%m%d-%H%M%S).samples"
+	ocd "${A55[@]}" -c "adapter speed ${JTAG_KHZ:-30000}" -c 'imx95.apb arp_examine' \
+	    -c "a55_top_samples {${3:-0 1 2 3 4 5}} ${2:-5} $OUT" -c shutdown
+	python3 "$H/trace/jtagtop.py" "$OUT" ${TOP_TTY:+--tty $TOP_TTY} ${TOP_ELF:+--elf $TOP_ELF} ;;
 read)
 	# read BASE SIZE FILE: through the AHB-AP, SWD at 5 MHz with 2 idle clocks per access: the
 	# CH347F's fastest path (docs/07), in the ocd-fast build
@@ -109,6 +118,6 @@ ktext)
 	SZ=$(aarch64-linux-gnu-readelf -lW "$KB/vmlinux" | awk '/LOAD/ {print $5; exit}')
 	exec "$0" read "${KTEXT_PA:-0x90400000}" "$SZ" "${2:-trace/ktext-live-$(date +%Y%m%d).bin}" ;;
 *)
-	sed -n '2,21p' "$0"; exit 2 ;;
+	sed -n '2,23p' "$0"; exit 2 ;;
 esac
 echo "log: $LOG"
