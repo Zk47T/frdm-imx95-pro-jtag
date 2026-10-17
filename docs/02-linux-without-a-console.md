@@ -94,6 +94,42 @@ The same picture as the trace's time per task (T10, T11), from a different mecha
 | Needs | a buffer, a readout and a decode | none of those |
 | Fits | an exact path | a quick "what is this board doing" |
 
+### 3.2 Breakpoints and watchpoints in the running kernel (2026-10-17) `[V]`
+
+```
+openocd -s openocd -f board/nxp_frdm-imx95-pro.cfg -c init -c imx95_fast -c imx95_a55
+gdb-multiarch vmlinux -ex 'target extended-remote :3333' -x gdb/imx95-linux.gdb
+```
+
+**`gdb/imx95-linux.gdb`:**
+- `tasks` and `current [CORE]` give the task on each A55. arm64 keeps the current task per CPU in `__entry_task`, which gdb reads through `__per_cpu_offset[]`.
+- `whowrote SYMBOL` sets a hardware watchpoint, then prints the backtrace and the writing task.
+- **The offsets are this build's:**
+  - This kernel's debug info has no `struct task_struct` (`CONFIG_DEBUG_INFO_REDUCED`), and the build has no BTF, so the kernel's own `lx-ps` helpers can't work.
+  - `pid` = `TSK_STACK_CANARY` − 8 = 1176, from `asm-offsets.h`.
+  - `comm` = 1664, where `init_task` holds `swapper/0`.
+  - `tasks` checks them: every idle core shows PID 0, `swapper/N`.
+
+**A watchpoint:** `whowrote vm_dirty_ratio` while the board's shell ran `echo 25 > /proc/sys/vm/dirty_ratio`.
+```
+Thread 4 "imx95.a55.3" hit Hardware watchpoint 1: vm_dirty_ratio
+Old value = 20
+New value = 25
+#0  do_proc_dointvec_minmax_conv ... kernel/sysctl.c:735
+#1  __do_proc_dointvec   #3 proc_dointvec_minmax   #4 dirty_ratio_handler
+#5  proc_sys_call_handler   #6 proc_sys_write   #8 vfs_write   #9 ksys_write ...
+core 3: pid 750 (sh)          <- the console's shell: its 'echo $$' printed 750
+```
+
+**A breakpoint:** `hbreak sdhci_irq` while the board read a file after dropping the page cache.
+- It stopped core 0, the only CPU that takes the eMMC interrupt.
+- The path was `call_on_irq_stack` → `gic_handle_irq` → `handle_fasteoi_irq` → `__handle_irq_event_percpu` → `sdhci_irq`.
+- It interrupted PID 76, `kworker/0:1H`, the eMMC completion worker.
+
+**Limits:**
+- Every stop halts all six cores (one SMP group), and with them nearly every WAKEUPMIX peripheral ([03](03-dsi-and-the-i2c-fault.md) §5). Keep stops short: RCU warns after about 21 s.
+- Kernel text is read-only, so breakpoints are hardware ones (`hbreak`): 6 per core, and 4 watchpoints.
+
 ## 4. Open: the board hangs while the JTAG console is in use `[V]` `[?]`
 
 **Seen once:**
