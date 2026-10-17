@@ -365,6 +365,21 @@ SUDO_PASS=... RANGES="0xffff800080cdd6a0:0xffff800080d244bc" trace/capture.sh t1
   - The caller now stays open across a call out of the range, with the time outside under it. Resuming in another function nests it as a callback.
 - **Wall times include sleeping:** `mmc_mq_queue_rq`'s longest wall time, 0.56 s in T13, is most likely a task waiting in `__mmc_claim_host` while other readers had the host.
 
+### 8.6 One process only: the PID as a trace filter (T16) `[V]`
+
+**The ETM's VMID comparator** (TRCIDR4: 1) compares CONTEXTIDR_EL2 with TRCCONFIGR.VMIDOPT set, and that is the PID here.
+- Tied to an address range (TRCACATR CONTEXTTYPE = VMID), it records only the kernel code run for that one process. With no `RANGES`, the range is the whole kernel image.
+- Usage: `PID=N ./ocd.sh trace-all ...`, then `mksnap.py --ranges 0xffff800080000000:0xffff800081c0fffc` so the pauses read as time outside.
+
+**The test:**
+- A `dd if=/dev/zero of=/dev/null bs=4096 count=400000` with a PID known before tracing started (`sh -c 'sleep 4; exec dd ...'`).
+- The whole real scenario ran at the same time, as noise.
+
+**The result:**
+- 8 s of tracing: 136 MB, all of it core 2, all of it PID 103575, 1.70 billion kernel instructions over the 0.71 s `dd` ran (1.6 GB at about 2.2 GB/s).
+- The five other cores, busy with the scenario, wrote nothing.
+- The profile is `dd`'s: `__arch_clear_user` (`read()` from `/dev/zero`), then the syscall path.
+
 ## 9. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known

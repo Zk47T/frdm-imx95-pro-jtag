@@ -102,7 +102,8 @@ trace-all)
 		M7B=(-c "cs_m7_start 0x20 $(( ${5:-0x8880} & 0x800 ))")
 		M7C=(-c cs_m7_stop)
 	fi
-	ocd -c "set cs_ranges {$RL}" -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
+	# PID=N: only while that process runs (its kernel code; with RANGES, only inside them)
+	ocd -c "set cs_ranges {$RL}" -c "set cs_pid {${PID:-}}" -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
 	    -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' "${M7A[@]}" \
 	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880} ${CCCTLR:-0}" "${M7B[@]}" -c "sleep ${4:-1500}" \
 	    -c 'cs_multi_stop {0 1 2 3 4 5}' "${M7C[@]}" -c shutdown ;;

@@ -428,6 +428,10 @@ proc cs_sink_start {base size} {
 #                 and 2n+1 with TRCACATR = 0 (instruction address, every EL), INCLUDE bit n of TRCVIIECTLR
 if { ![info exists cs_victlr] } { set cs_victlr 0x201 }
 if { ![info exists cs_ranges] } { set cs_ranges {} }
+#   cs_pid        only while this PID runs: VMID comparator 0 (TRCVMIDCVR0; with TRCCONFIGR.VMIDOPT it
+#                 compares CONTEXTIDR_EL2, the PID here) tied to every range (TRCACATR CONTEXTTYPE=VMID).
+#                 With no ranges, the whole kernel image is the range.
+if { ![info exists cs_pid] } { set cs_pid {} }
 if { ![info exists cs_stallctlr] } { set cs_stallctlr 0x0 }
 
 # One core's ETM: OS unlock, keep powered, program, enable.
@@ -451,13 +455,22 @@ proc cs_etm_start {core traceid {configr 0x0} {ccctlr 0x0}} {
 	cs_w [expr {$e + 0x080}] $::cs_victlr
 	set inc 0
 	set n 0
-	foreach r $::cs_ranges {
+	set ranges $::cs_ranges
+	set atr 0
+	if {$::cs_pid ne ""} {
+		cs_w [expr {$e + 0x640}] $::cs_pid
+		cs_w [expr {$e + 0x644}] 0
+		cs_w [expr {$e + 0x688}] 0
+		set atr 0x8
+		if {![llength $ranges]} { set ranges {{0xffff800080000000 0xffff800081c0fffc}} }
+	}
+	foreach r $ranges {
 		foreach {k a} [list 0 [lindex $r 0] 1 [lindex $r 1]] {
 			set acv [expr {$e + 0x400 + 8 * (2 * $n + $k)}]
 			set aca [expr {$e + 0x480 + 8 * (2 * $n + $k)}]
 			cs_w $acv [expr {$a & 0xffffffff}]
 			cs_w [expr {$acv + 4}] [expr {($a >> 32) & 0xffffffff}]
-			cs_w $aca 0
+			cs_w $aca $atr
 			cs_w [expr {$aca + 4}] 0
 		}
 		set inc [expr {$inc | (1 << $n)}]
