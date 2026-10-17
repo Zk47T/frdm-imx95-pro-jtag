@@ -396,7 +396,16 @@ proc cs_sink_start {base size} {
 	cs_w [expr {$f + 0x20}] 1
 }
 
-# One core's ETM: OS unlock, keep powered, program (nothing excluded: Linux runs at EL2), enable.
+# What every ETM is programmed with (set before cs_multi_start / cs_trace_start):
+#   cs_victlr     TRCVICTLR: 0x201 traces everything (Linux runs at EL2, VHE, so nothing is excluded by
+#                 default); 0x100201 also excludes non-secure EL0: no user code, whose trace can't be
+#                 decoded without the programs' images anyway, and which takes much of the bandwidth
+#   cs_stallctlr  TRCSTALLCTLR: 0 never stalls; 0x10C (ISTALL, LEVEL 3) lets the ETM hold its core
+#                 back when its FIFO fills, instead of overflowing (TRCIDR3.STALLCTL = 1 here)
+if { ![info exists cs_victlr] } { set cs_victlr 0x201 }
+if { ![info exists cs_stallctlr] } { set cs_stallctlr 0x0 }
+
+# One core's ETM: OS unlock, keep powered, program, enable.
 proc cs_etm_start {core traceid {configr 0x0} {ccctlr 0x0}} {
 	set e [etm_base $core]
 	cs_w [expr {$e + 0xfb0}] $::cs_lock
@@ -408,13 +417,13 @@ proc cs_etm_start {core traceid {configr 0x0} {ccctlr 0x0}} {
 	cs_w [expr {$e + 0x018}] 0
 	cs_w [expr {$e + 0x020}] 0
 	cs_w [expr {$e + 0x024}] 0
-	cs_w [expr {$e + 0x02c}] 0
+	cs_w [expr {$e + 0x02c}] $::cs_stallctlr
 	cs_w [expr {$e + 0x030}] 0
 	cs_w [expr {$e + 0x034}] 0xc
 	cs_w [expr {$e + 0x038}] $ccctlr
 	cs_w [expr {$e + 0x03c}] 0
 	cs_w [expr {$e + 0x040}] $traceid
-	cs_w [expr {$e + 0x080}] 0x201
+	cs_w [expr {$e + 0x080}] $::cs_victlr
 	cs_w [expr {$e + 0x084}] 0
 	cs_w [expr {$e + 0x088}] 0
 	cs_w [expr {$e + 0x004}] 1

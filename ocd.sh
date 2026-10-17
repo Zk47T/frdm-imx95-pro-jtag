@@ -12,7 +12,7 @@
 #   ocd.sh pcs [CORE] [N]    after authentication: N samples of an A55's PC without halting it
 #   ocd.sh etm-ids [CORE]    OS-unlock an A55's ETM and print its ID registers (for the trace decoder)
 #   ocd.sh trace CORE BASE SIZE MS   ETM -> ETF -> ETR trace into DRAM (docs/04)
-#   ocd.sh trace-all BASE SIZE MS [CONFIGR]   all six A55s into one buffer (docs/04 §7, §8)
+#   ocd.sh trace-all BASE SIZE MS [CONFIGR]   all six A55s into one buffer, kernel only (docs/04 §7, §8)
 #   ocd.sh read BASE SIZE FILE         memory into FILE over SWD at 5 MHz (276 KiB/s): trace readout
 #   ocd.sh ktext [FILE]                the running kernel's text, for mksnap.py --kernel-live
 # DBG0=0x... ocd.sh ...      another A55 debug base (default 0x80810000, measured 2026-10-16)
@@ -84,7 +84,12 @@ trace-all)
 	# trace-all BASE SIZE MS [CONFIGR]: all six A55s, trace ID 0x10 + core, stopped at the sink so
 	# that every core ends at the same instant (docs/04 §7). CONFIGR 0x8880 (default): timestamps and
 	# the PID (CONTEXTIDR_EL2, traced as the VMID); 0x800: timestamps only
-	ocd "${A55[@]}" -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' \
+	# User code (EL0) is not traced by default (VICTLR=0x100201): it can't be decoded without the
+	# programs' images, it took half the bandwidth, and without it a busy real system had 0 overflows
+	# instead of 76,000 (T10/T11, docs/04 §8.3). VICTLR=0x201: trace it too (with mksnap.py --elf for
+	# a static program). STALL=0x10C: ETM stall instead of overflow (imx95-jtag.tcl)
+	ocd -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
+	    -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' \
 	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880}" -c "sleep ${4:-1500}" \
 	    -c 'cs_multi_stop {0 1 2 3 4 5}' -c shutdown ;;
 read)

@@ -116,7 +116,8 @@ def label(f, names, cm):
     if f == F_IDLE:
         return '[WFI: core asleep]'
     if f == F_NOIMG:
-        return '[kernel code without an image]'
+        # T11: __seccomp_filter calling JIT-compiled seccomp BPF just past the kernel image
+        return '[JIT or module code: BPF, no image]'
     if f == F_SWITCH:
         return '[task switch]'
     if f <= F_TASK:
@@ -187,7 +188,7 @@ def _index_source(job):
     """The call stack of one trace source, one row per executed range.
     - An overflow (NO_SYNC, TRACE_ON [overflow]) loses trace for a while: the stack starts again.
     - TRACE_ON [begin or filter] is the ETM pausing around WFI: the stack holds, and the sleep becomes
-      an idle row.
+      an idle row. After a return to EL0 (user code excluded by TRCVICTLR) it is the user code instead.
     - Code with no image (user programs: dynamically linked, ASLR; kernel modules) can't be followed:
       ADDR_NACC. A stretch of it becomes one row, user code named by its process.
     - Time: rows that stand for untraced time (idle, no image) get it as virtual instructions at the
@@ -276,6 +277,16 @@ def _index_source(job):
                 if s.icount:
                     gaps.extend((core, s.icount))
                 s.stack, s.pending, s.credit = [], K_JUMP, None
+            elif s.icount and s.el == 0:
+                # user code not traced (TRCVICTLR excludes EL0): the trace stopped at the return to
+                # user space and resumes at the next kernel entry, on its vector, with no EXCEPTION
+                # element. The gap is that process's user code, and the kernel nests under it.
+                f = F_USER - max(s.pid, 0)
+                s.pending = K_JUMP
+                enter(f)
+                add(0, 0, 0, len(s.stack), f, credit=True)
+                s.stack.append(F_MARK)
+                s.pending = K_CALL
             elif s.icount:
                 add(0, 0, 0, len(s.stack) + 1, F_IDLE, credit=True)
             s.nacc = None

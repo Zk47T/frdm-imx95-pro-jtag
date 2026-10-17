@@ -292,9 +292,22 @@ PC:     ./ocd.sh read 0xf1000000 0x1000000 trace/etr-t9.bin
   - In one 27 ms chunk at 620 MB/s, cores 1 and 2 lost trace 231 and 276 times.
   - Bursts from several cores running dense code at once overrun the shared path (a 16 KB ETF FIFO, one ETR).
   - The task timeline is unaffected: PIDs and timestamps keep coming. The instruction-level detail has holes.
-  - **Next:**
-    - stop tracing user code (TRCVICTLR EL0 exclusion), which can't be decoded without its images yet takes much of the bandwidth;
-    - or ETM stall (TRCSTALLCTLR).
+
+**The fix (T11): don't trace user code.** TRCVICTLR = 0x100201 excludes non-secure EL0. T11 ran the same scenario for the same 6 s:
+
+| | T10: everything traced | T11: user code excluded |
+|---|---|---|
+| trace for 6.07 s | 903 MB | **449 MB** |
+| kernel instructions decoded | 2.05 billion | 2.14 billion |
+| overflows | 76,338 | **0** |
+| task switches | 22,292 | 21,028 |
+
+- **User time per process is still measured,** from the timestamps on both sides of each stretch.
+- **What the trace shows at a return to user space:** `eret`, `PE_CONTEXT EL0`, `EXCEPTION_RET`, a timestamp. Then, at the next kernel entry: `TRACE_ON [begin or filter]`, `PE_CONTEXT EL2`, and the EL0 vector (`0x...10c00`) with no EXCEPTION element. `tracetool.py` turns that into a user-code row for the process, with the kernel nested under it.
+- **The detail is clean:** a 20 ms cut of the busiest stretch (`ss-t11-storm`, 5500–5520 ms) has stacks 47–52 deep at most, 656,142 slices, and 0 Perfetto import errors.
+- **`ocd.sh trace-all` now excludes user code by default.** `VICTLR=0x201` traces it too, for a static program whose ELF goes to `mksnap.py --elf`.
+- **The image-less kernel code is seccomp:** `__seccomp_filter` calls JIT-compiled BPF filters just past the kernel image (after `kimage_limit`). systemd and the udev workers run sandboxed, and every one of their syscalls runs a filter. 11,354 such calls in one 16 MB chunk of T11.
+- **Short-lived processes stay `?`:** this kernel has no ftrace (`CONFIG_FTRACE` off), and they come and go between the 0.2 s `/proc` samples.
 
 ## 9. Lessons
 
