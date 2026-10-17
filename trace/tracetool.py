@@ -43,6 +43,9 @@ ERET = re.compile(r'OCSD_GEN_TRC_ELEM_EXCEPTION_RET')
 CTX = re.compile(r'PE_CONTEXT\(\(ISA=\w+\) (EL\d)')
 VMID = re.compile(r'VMID=0x([0-9a-f]+);')
 NACC = re.compile(r'ADDR_NACC\( 0x([0-9a-f]+);')
+EXCNUM = re.compile(r'excep num \((0x[0-9a-f]+)\)')
+PREFRET = re.compile(r'pref ret addr:0x([0-9a-f]+)')
+M_PENDSV = 0x0e   # M-profile exception 14: where an RTOS (FreeRTOS here) switches tasks
 
 K_CALL, K_RET, K_JUMP, K_NT = 1, 2, 3, 0
 MASK = (1 << 64) - 1
@@ -84,6 +87,11 @@ class Syms:
                         p = l.split()
                         if len(p) == 3 and p[1] in 'tTwW':
                             s.append((int(p[0], 16), f + ':' + p[2]))
+        m7 = os.path.join(snap, 'm7syms.txt')     # cmd_index/cmd_summary: m7_symbols()
+        if os.path.exists(m7):
+            for l in open(m7):
+                a_, n_ = l.split()
+                s.append((int(a_, 16), n_))
         s.sort()
         self.addr = [a for a, _ in s]
         self.name = [n for _, n in s]
@@ -145,6 +153,9 @@ class _Src:
         self.credit_cc = 0
         self.last_ts, self.last_ts_ic = None, 0
         self.nacc = None          # (func, depth) of the stretch without an image being extended
+        self.next_pc = None       # M7: the next instruction after a not-taken range (an exception's return)
+        self.exc = []             # M7: the exceptions being handled, innermost last
+        self.resume = False       # M7: the next range is a task resumed by PendSV
 
 
 def trace_ids(snap):
@@ -158,12 +169,53 @@ def trace_ids(snap):
 
 
 _SYMS = None   # set before the index workers fork; they inherit it
+M7_ID = 0x20   # the M7's ETM (ocd.sh trace-all M7=1); shown as core 16, 'M7'
+M7_VECTORS = ['initial_sp', 'Reset', 'NMI', 'HardFault', 'MemManage', 'BusFault', 'UsageFault', 'v7', 'v8', 'v9', 'v10',
+              'SVC', 'DebugMon', 'v13', 'PendSV', 'SysTick']
+
+
+def cname(c):
+    return 'M7' if c == M7_ID - 0x10 else 'core %d' % c
+
+
+def m7_symbols(snap):
+    """Names for the M7's code without its ELF: the handlers in its vector table (the ITCM at 0), and
+    a 'm7_ADDR' function at every call or exception target its trace reaches. -> SNAP/m7syms.txt"""
+    if M7_ID not in trace_ids(snap) or not os.path.exists(os.path.join(snap, 'itcm_m7.bin')):
+        return
+    import struct
+    itcm = open(os.path.join(snap, 'itcm_m7.bin'), 'rb').read()
+    vec = struct.unpack('<%dI' % (len(itcm[:0x400]) // 4), itcm[:0x400])
+    names = {}
+    for i, v in enumerate(vec[1:], 1):
+        if v and v & 1 and (v & ~1) < len(itcm):
+            n = M7_VECTORS[i] if i < 16 else 'IRQ%d' % (i - 16)
+            names.setdefault(v & ~1, 'm7_' + n + '_Handler')
+    p = subprocess.Popen([OCSD, '-ss_dir', snap, '-decode_only', '-logstdout', '-no_time_print', '-id', '%#x' % M7_ID],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
+    entry = False
+    for line in p.stdout:
+        m = RNG.search(line)
+        if m:
+            a = int(m.group(1), 16)
+            if entry and a not in names:
+                names[a] = 'm7_%x' % a
+            entry = m.group(4) == 'E' and 'b+link' in m.group(6)
+        elif EXC.search(line):
+            entry = True
+    p.wait()
+    with open(os.path.join(snap, 'm7syms.txt'), 'w') as f:
+        for a, n in sorted(names.items()):
+            f.write('%#x %s\n' % (a, n))
+    print('M7: %d functions named (%d from its vector table)' % (len(names),
+          sum(1 for n in names.values() if n.endswith('_Handler'))))
 
 
 def cmd_index(a):
     """One process per trace ID, each with its own decoder (trc_pkt_lister -id): the sources are
     independent, and a whole six-core buffer indexes in about the time of its busiest core."""
     global _SYMS
+    m7_symbols(a.snap)
     _SYMS = Syms(a.snap)
     jobs = [(a.snap, tid, a.start, a.count) for tid in trace_ids(a.snap)]
     with multiprocessing.get_context('fork').Pool(len(jobs)) as pool:
@@ -203,6 +255,7 @@ def _index_source(job):
     syms, core, s = _SYMS, tid - 0x10, _Src()
     # an address-filtered trace (mksnap.py --ranges): every pause is time outside the ranges
     filtered = os.path.exists(os.path.join(snap, 'ranges.txt'))
+    m7 = tid == M7_ID      # Thumb-2 at 'EL0S' always: its pauses are WFI, never a return to user space
     p = subprocess.Popen([OCSD, '-ss_dir', snap, '-decode_only', '-logstdout', '-no_time_print', '-id', '%#x' % tid],
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     rows = array.array('q')   # W columns, see W
@@ -243,6 +296,16 @@ def _index_source(job):
         if m:
             st, en, n = int(m.group(1), 16), int(m.group(2), 16), int(m.group(3))
             f = syms.idx(st)
+            if s.resume:
+                # an RTOS task switch on the M7 (no PID there): a task resumes exactly where PendSV
+                # switched it out, so its stack was saved under that address. One shared stack piled
+                # the tasks' frames (FreeRTOS blocks inside a call that returns in another task).
+                s.resume = False
+                s.stack = s.stacks.pop(st, [])
+                add(0, 0, 0, 0, F_SWITCH)
+                for d, g in enumerate(s.stack):
+                    if g != F_MARK:
+                        add(0, 0, 0, d + 1, g)
             enter(f)
             taken, extra = m.group(4), m.group(6)
             if taken == 'E' and 'b+link' in extra:
@@ -254,6 +317,7 @@ def _index_source(job):
             add(s64(st), s64(en), n, len(s.stack), f)
             s.icount += n
             s.nacc = None
+            s.next_pc = en if taken == 'N' else None
             if stop_at and s.icount >= stop_at:
                 p.kill()                     # this core's window is full
                 break
@@ -261,7 +325,7 @@ def _index_source(job):
         m = NACC.search(line)
         if m:
             addr = int(m.group(1), 16)
-            f = F_USER - max(s.pid, 0) if addr < 1 << 63 else F_NOIMG
+            f = F_USER - max(s.pid, 0) if addr < 1 << 63 and not m7 else F_NOIMG
             if s.nacc == (f, len(s.stack)):
                 continue                     # the same stretch: nothing to count, the row stands
             enter(f)
@@ -270,10 +334,21 @@ def _index_source(job):
             s.nacc = (f, len(s.stack))
             continue
         if EXC.search(line):
+            if m7:
+                num = EXCNUM.search(line)
+                num = int(num.group(1), 16) if num else -1
+                if num == M_PENDSV:
+                    pr = PREFRET.search(line)
+                    back = int(pr.group(1), 16) if pr else s.next_pc
+                    if back is not None:
+                        s.stacks[back] = list(s.stack)   # the outgoing task resumes at 'back'
+                s.exc.append(num)
             s.stack.append(F_MARK)           # the exception's frames go above this marker
             s.pending, s.nacc = K_CALL, None
             continue
         if ERET.search(line):
+            if m7 and s.exc and s.exc.pop() == M_PENDSV:
+                s.resume = True
             while s.stack and s.stack[-1] != F_MARK:
                 s.stack.pop()
             if s.stack:
@@ -292,7 +367,7 @@ def _index_source(job):
                 add(0, 0, 0, 1, F_OUTSIDE, credit=True)
                 s.pid = pid
                 s.stack, s.pending = [], K_JUMP
-            elif s.icount and s.el == 0:
+            elif s.icount and s.el == 0 and not m7:
                 # user code not traced (TRCVICTLR excludes EL0): the trace stopped at the return to
                 # user space and resumes at the next kernel entry, on its vector, with no EXCEPTION
                 # element. The gap is that process's user code, and the kernel nests under it.
@@ -313,6 +388,11 @@ def _index_source(job):
         m = TS.search(line)
         if m:
             v = int(m.group(1), 16)
+            if m7:
+                # the M7's ETM timestamps the same system counter without the A55s' 8 fractional
+                # bits: 24 MHz against 6.144 G/s (2026-10-17: 0x70e27207ec against 0x70e254cdb3ff,
+                # both about 20,210 s, the uptime). x256 puts both on one time axis.
+                v <<= 8
             if s.credit is not None and s.last_ts is not None:
                 extra_ = int((v - s.last_ts) / 6.144 * RATE) - (s.icount - s.last_ts_ic)
                 if extra_ > 0:
@@ -366,13 +446,13 @@ def coverage(snap):
     t0 = capture_start(cores)
     gaps = np.load(os.path.join(snap, 'index.npz'), allow_pickle=True)['gaps']
     gaps = gaps[:, 0] if gaps.shape[1] == 2 else np.zeros(len(gaps), np.int64)
-    print('core   from ms    to ms   instructions    ranges  timestamps  cycle counts  gaps  max depth')
+    print('   core from ms    to ms   instructions    ranges  timestamps  cycle counts  gaps  max depth')
     span = {}
     for c, ix in cores.items():
         r = ix.r
         a, b = ix.t_ns(int(r[0, 3])) - t0, ix.t_ns(int(r[-1, 3] + r[-1, 2])) - t0
         span[c] = (a, b, int(r[r[:, 6] >= F_UNKNOWN, 2].sum()))
-        print('%4d %9.3f %8.3f %14d %9d %11d %13d %5d %10d' % (c, a / 1e6, b / 1e6, span[c][2], len(r), len(ix.ts),
+        print('%7s %6.3f %8.3f %14d %9d %11d %13d %5d %10d' % (cname(c), a / 1e6, b / 1e6, span[c][2], len(r), len(ix.ts),
                                                             len(ix.cc), int((gaps == c).sum()), int(r[:, 5].max())))
     for c in sorted(set(t - 0x10 for t in trace_ids(snap)) - set(cores)):
         print('%4d  no trace in the buffer (asleep, or off)' % c)
@@ -556,7 +636,7 @@ def tracks_of(a, cores, t_base):
     for c, ix in cores.items():
         if (ix.r[:, 8] >= 0).any():
             out.append((20 + c, 'core %d tasks' % c, 2 * c, task_events(ix, t_base)))
-        out.append((10 + c, 'core %d (%s)' % (c, ix.unit or 'instructions at %.1f GIPS' % a.gips), 2 * c + 1,
+        out.append((10 + c, '%s (%s)' % (cname(c), ix.unit or 'instructions at %.1f GIPS' % a.gips), 2 * c + 1,
                     events(ix, t_base)))
     return out
 
@@ -745,7 +825,8 @@ def _compact_folded(folded, cm, name, min_share=1e-6):
     part-way, and T10's 76,000 of them made 925 MB of distinct partial stacks."""
     agg = {}
     for (prefix, pid, stack), v in folded.items():
-        root = ('idle' if pid == 0 else cm.get(pid, '?')) if pid >= 0 else '?'
+        root = ('idle' if pid == 0 else cm.get(pid, '?')) if pid >= 0 else \
+            ('M7' if prefix == cname(M7_ID - 0x10).replace('M7', 'core %d' % (M7_ID - 0x10)) else '?')
         k = ';'.join([root] + [cm.get(F_USER - g, '?') + ' (user code)' if F_TASK < g <= F_USER else name(g)
                                for g in stack])
         agg[k] = agg.get(k, 0) + v
@@ -762,6 +843,7 @@ def cmd_summary(a):
     for 'cut'), SNAP/tasks.perfetto-trace (every task on every core over the whole capture) and
     SNAP/trace.folded."""
     global _SYMS, _COMMS
+    m7_symbols(a.snap)
     _SYMS, _COMMS = Syms(a.snap), comms(a.snap)
     data = os.path.join(a.snap, 'cstrace.bin')
     size, ch = os.path.getsize(data), a.chunk_mb << 20
@@ -803,7 +885,7 @@ def cmd_summary(a):
 
     cores = sorted(set(r['core'] for r in res))
     folded, runs = {}, {}
-    print('core  instructions  overflows  time per task (CONTEXTIDR_EL2 = PID; idle [0] includes WFI)')
+    print('   core  instructions  overflows  time per task (CONTEXTIDR_EL2 = PID; idle [0] includes WFI)')
     for c in cores:
         rc = [r for r in res if r['core'] == c]
         for r in rc:
@@ -825,7 +907,7 @@ def cmd_summary(a):
         if not tot and not sum(r['n'] for r in rc):
             print('%4d  no trace (asleep, or off)' % c)
             continue
-        print('%4d %13d %10d  %s' % (c, sum(r['n'] for r in rc), sum(r['gaps'] for r in rc), ', '.join(
+        print('%7s %13d %10d  %s' % (cname(c), sum(r['n'] for r in rc), sum(r['gaps'] for r in rc), ', '.join(
             '%s %.0f%%' % (task_name(p, _COMMS), 100.0 * d / all_) for p, d in sorted(tot.items(), key=lambda x: -x[1])[:6])))
     for c in sorted(set(t - 0x10 for t in trace_ids(a.snap)) - set(cores)):
         print('%4d  no trace (asleep, or off)' % c)

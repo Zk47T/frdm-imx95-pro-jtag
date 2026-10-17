@@ -59,6 +59,42 @@ What limits it:
 - **Wrap reads in `catch` in one-shot scripts:** an error (like the register name `xPSR`, which is `xpsr`) ends OpenOCD before its `resume`.
 - **Halting the M7 freezes WDOG5 (bit 26) and LPTMR2 (bit 19):** `IPG_DEBUG_CM7` = 0x04080000 (RM, BLK_CTRL_WAKEUPMIX). That's its watchdog and timer, so a breakpoint doesn't trigger a watchdog reset. A halted A55 core freezes almost every WAKEUPMIX peripheral (0xfbf7ffff; [03](03-dsi-and-the-i2c-fault.md) §5).
 
+### The M7's trace, into the same buffer as the A55s (2026-10-17) `[V]`
+
+**The M7's ROM table** (AP 2, `imx95.dap info 2`) lists:
+
+| Address | Component |
+|---|---|
+| 0xE000E000 | SCS |
+| 0xE0001000 | DWT |
+| 0xE0002000 | FPB |
+| 0xE0000000 | ITM |
+| **0xE0041000** | **ETM**: ETMv4.0, TRCIDR1 0x4100f401; 32-bit addresses, 64-bit timestamps |
+| 0xE0042000 | CTI |
+| **0xE0043000** | **a trace funnel** |
+| — | no TPIU |
+
+**Its trace reaches the A55s' ETF/ETR:**
+- With only the M7's ETM on (trace ID 0x20, funnel port 0), the ETR filled at 10 MB/s, and every byte carried ID 0x20.
+- OpenCSD decodes it as Thumb-2 against the ITCM read over AP 2 (256 KB at 0x0): 7.25 M ranges in 200 ms, 0 errors.
+
+**What runs there:** the ITCM matches `imx95-19x19-frdm_m7_TCM_power_mode_switch.bin` word for word, NXP's FreeRTOS demo.
+- PendSV (exception 14, the task switch): about 700 times a second.
+- External interrupt 18 (the RTOS tick): about 1 kHz.
+
+**One clock for both:**
+- The M7's ETM timestamps the same system counter, but without the A55s' 8 fractional bits: `0x70e27207ec` against `0x70e254cdb3ff`, both about 20,210 s, the uptime.
+- `tracetool.py` multiplies them by 256, and the M7 lines up with the A55s.
+
+**Tools:**
+```
+M7=1 SUDO_PASS=... trace/capture.sh NAME SECS      # ocd.sh m7code, trace-all M7=1, mksnap.py --m7
+```
+- In one 3 s capture (T14), seven cores were traced together: 321 M M7 instructions next to the six A55s.
+- **Names without the firmware's ELF:** the vector table names the handlers (`m7_PendSV_Handler`, `m7_IRQ18_Handler`, ...). Every other call target becomes a `m7_ADDR` function.
+- **Call stacks:** FreeRTOS blocks a task inside a call that returns later in another task. So each task's stack is saved under the address PendSV switched it out at, since a task always resumes exactly there. 499 of 702 resumes found their stack; the rest were switched out before the window. The median depth is now 1, not 49.
+- **What's still rough:** without the ELF, a function reached only by a branch or a return gets the nearest name below it, and one spot still nests up to 108. With an MCUXpresso build's ELF, names and boundaries would be exact.
+
 ### MCUXpresso and other IDEs
 
 - An IDE debugs through a **GDB server**. OpenOCD with this kit is one: in `imx95-pro.cfg` with `IMX95_A55=1`, **port 3333 = A55 (SMP, threads), 3334 = M7, 3335 = M33**.

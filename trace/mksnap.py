@@ -63,6 +63,8 @@ def main():
                     'kept as pids.txt, tracetool names the tasks with it')
     ap.add_argument('--ranges', help="LO:HI,...: the address ranges the ETMs were limited to (ocd.sh RANGES): "
                     "tracetool then reads every pause in the trace as time outside them")
+    ap.add_argument('--m7', metavar='ITCM', help="the M7 traced too (ocd.sh trace-all M7=1, its 'etm m7:' line in "
+                    "the log): its ITCM as read over AP 2 (0x0, 256 KB), the code its trace is decoded against")
     ap.add_argument('--no-decode', action='store_true',
                     help='only the snapshot and decode-head.txt: a big capture goes to tracetool.py summary')
     ap.add_argument('--kernel-live', help='the running kernel text (physical _text, length of the first '
@@ -89,6 +91,28 @@ def main():
             f.write('[device]\nname=etm_%d\nclass=trace_source\ntype=ETM4\n\n[regs]\n' % c)
             for k, v in regs.items():
                 f.write('%s=0x%08X\n' % (k, v))
+
+    srcs = [str(c) for c in cores]
+    if a.m7:
+        # the M7: trace ID 0x20, Thumb-2, 32-bit addresses; timestamps if the A55s have them, no VMID
+        m = re.findall(r'etm m7: (.*)', open(a.log).read())
+        if not m:
+            sys.exit("no 'etm m7:' line in %s (imx95-jtag.tcl m7_etm_ids)" % a.log)
+        ids = dict(re.findall(r'(TRC[A-Z0-9]+)=(0x[0-9a-f]+|0)\b', m[-1]))
+        regs = {'TRCCONFIGR': a.configr & 0x800, 'TRCTRACEIDR': 0x20}
+        for k in ('TRCAUTHSTATUS', 'TRCIDR0', 'TRCIDR1', 'TRCIDR2', 'TRCIDR8', 'TRCIDR9', 'TRCIDR10', 'TRCIDR11',
+                  'TRCIDR12', 'TRCIDR13'):
+            regs[k] = int(ids[k], 16) if ids[k] != '0' else 0
+        with open(os.path.join(a.out, 'etm_m7.ini'), 'w') as f:
+            f.write('[device]\nname=etm_m7\nclass=trace_source\ntype=ETM4\n\n[regs]\n')
+            for k, v in regs.items():
+                f.write('%s=0x%08X\n' % (k, v))
+        itcm = open(a.m7, 'rb').read()
+        open(os.path.join(a.out, 'itcm_m7.bin'), 'wb').write(itcm)
+        with open(os.path.join(a.out, 'cpu_m7.ini'), 'w') as f:
+            f.write('[device]\nname=cpu_m7\nclass=core\ntype=Cortex-M7\n\n[regs]\nPC=0\n\n'
+                    '[dump1]\nfile=itcm_m7.bin\naddress=0x00000000\nlength=0x%X\nspace=ANY\n' % len(itcm))
+        srcs.append('m7')
 
     dumps = []
     for elf in [KB + '/vmlinux'] + a.elf:
@@ -121,14 +145,14 @@ def main():
     if a.pids:
         with open(os.path.join(a.out, 'pids.txt'), 'w') as f:
             f.writelines(l for l in open(a.pids) if re.match(r'\d+ \S', l))
-    devs = ''.join('device%d=cpu_%d.ini\ndevice%d=etm_%d.ini\n' % (2 * i, c, 2 * i + 1, c) for i, c in enumerate(cores))
+    devs = ''.join('device%d=cpu_%s.ini\ndevice%d=etm_%s.ini\n' % (2 * i, c, 2 * i + 1, c) for i, c in enumerate(srcs))
     open(os.path.join(a.out, 'snapshot.ini'), 'w').write(
         '[snapshot]\nversion=1.0\ndescription=i.MX95 A55 cores %s ETMv4 -> ETF -> ETR, read over JTAG\n\n'
         '[device_list]\n%s\n[trace]\nmetadata=trace.ini\n' % (a.cores, devs))
     open(os.path.join(a.out, 'trace.ini'), 'w').write(
         '[trace_buffers]\nbuffers=buffer0\n\n[buffer0]\nname=etr_0\nfile=cstrace.bin\nformat=coresight\n\n'
-        '[source_buffers]\n' + ''.join('etm_%d=etr_0\n' % c for c in cores) +
-        '\n[core_trace_sources]\n' + ''.join('cpu_%d=etm_%d\n' % (c, c) for c in cores))
+        '[source_buffers]\n' + ''.join('etm_%s=etr_0\n' % c for c in srcs) +
+        '\n[core_trace_sources]\n' + ''.join('cpu_%s=etm_%s\n' % (c, c) for c in srcs))
     print('snapshot in %s: %d bytes of trace (%s), %d memory images' % (
         a.out, len(data), 'rotated at RWP' if a.full else 'not wrapped', len(dumps)))
 

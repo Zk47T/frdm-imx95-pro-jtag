@@ -516,6 +516,50 @@ proc cs_trace_stop {core} {
 	return [cs_multi_stop [list $core]]
 }
 
+# --- the M7's trace: its ETM (0xE0041000) -> its own funnel (0xE0043000, port 0) -> the same ETF/ETR --
+# Found 2026-10-17: the M7's ROM table (AP 2) lists an ETMv4.0 (TRCIDR1 0x4100f401, 32-bit addresses,
+# 64-bit timestamps), an ITM, a CTI and a funnel, and no TPIU. With only the M7's ETM on, the ETR
+# filled at 10 MB/s with trace ID 0x20, and OpenCSD decoded it (Thumb-2) against the ITCM read over
+# AP 2. Programmed through the M7's AP while it runs: imx95.m7 must be examined (arp_examine,
+# arp_poll), which needs the M7 running (not in serial download).
+set m7_etm 0xE0041000
+set m7_funnel 0xE0043000
+proc m7_r {a} { return [lindex [imx95.m7 read_memory $a 32 1] 0] }
+proc m7_w {a v} { imx95.m7 write_memory $a 32 [list $v] }
+# the M7 ETM's ID registers in etm_ids' format, as 'etm m7: ...' (for mksnap.py --m7)
+proc m7_etm_ids {} {
+	set e $::m7_etm
+	set s ""
+	foreach {n o} {TRCIDR0 0x1e0 TRCIDR1 0x1e4 TRCIDR2 0x1e8 TRCIDR3 0x1ec TRCIDR4 0x1f0 TRCIDR5 0x1f4
+	               TRCIDR8 0x180 TRCIDR9 0x184 TRCIDR10 0x188 TRCIDR11 0x18c TRCIDR12 0x190 TRCIDR13 0x194
+	               TRCAUTHSTATUS 0xfb8 TRCDEVARCH 0xfbc} {
+		append s [format "%s=%#x " $n [m7_r [expr {$e + $o}]]]
+	}
+	echo "etm m7: $s"
+}
+proc cs_m7_start {{traceid 0x20} {configr 0x0}} {
+	set e $::m7_etm; set f $::m7_funnel
+	m7_w [expr {$e + 0xfb0}] $::cs_lock
+	m7_w [expr {$f + 0xfb0}] $::cs_lock
+	m7_w [expr {$e + 0x004}] 0
+	set t0 [clock milliseconds]
+	while {!([m7_r [expr {$e + 0x00c}]] & 1)} {
+		if {[clock milliseconds] - $t0 > 500} { error "m7 etm: never idle" }
+	}
+	m7_w [expr {$e + 0x010}] $configr
+	m7_w [expr {$e + 0x034}] 0xc
+	m7_w [expr {$e + 0x040}] $traceid
+	m7_w [expr {$e + 0x080}] 0x201
+	m7_w [expr {$e + 0x084}] 0
+	m7_w [expr {$e + 0x088}] 0
+	m7_w $f [expr {[m7_r $f] | 0x1}]
+	m7_w [expr {$e + 0x004}] 1
+	echo [format "cs: m7 etm on, trace id %#x, TRCCONFIGR %#x" $traceid $configr]
+}
+proc cs_m7_stop {} {
+	m7_w [expr {$::m7_etm + 0x004}] 0
+}
+
 # Several cores into the same buffer: core n gets trace id 0x10 + n (the funnels merge them).
 # The cores must be powered (cpuidle.off=1): an ETM access to a powered-off core wedges the APB-AP.
 proc cs_multi_start {cores base size {configr 0x0} {ccctlr 0x0}} {
