@@ -318,6 +318,26 @@ SUDO_PASS=... trace/capture.sh NAME SECS ['board command']
 - **The image-less kernel code is seccomp:** `__seccomp_filter` calls JIT-compiled BPF filters just past the kernel image (after `kimage_limit`). systemd and the udev workers run sandboxed, and every one of their syscalls runs a filter. 11,354 such calls in one 16 MB chunk of T11.
 - **Short-lived processes stay `?`:** this kernel has no ftrace (`CONFIG_FTRACE` off), and they come and go between the 0.2 s `/proc` samples.
 
+### 8.4 One driver for 20 s: address-range filters (T13, 2026-10-17) `[V]`
+
+**Each A55 ETM has 4 address-comparator pairs** (TRCIDR4.NUMACPAIRS). With an include range it records only instructions inside it:
+- `RANGES="LO:HI ..."` on `ocd.sh trace-all` or `trace/capture.sh` sets TRCACVR 2n and 2n+1, TRCACATR = 0 (instruction address, every EL) and INCLUDE bit n of TRCVIIECTLR (`cs_ranges` in `imx95-jtag.tcl`).
+- `mksnap.py --ranges` notes the ranges in the snapshot (`ranges.txt`). `tracetool.py` then reads every pause in the trace as time outside them: no task, the stack starts again, and it isn't drawn in Perfetto.
+
+**The MMC core and SDHCI host drivers are one block of the kernel image:** 1,007 functions, 285 KB, from `mmc_cqe_request_done` (`0xffff800080cdd6a0`) to `0xffff800080d244c0`. The objects in `drivers/mmc/` were matched against System.map.
+```
+SUDO_PASS=... RANGES="0xffff800080cdd6a0:0xffff800080d244bc" trace/capture.sh t13-mmc-20s 20
+```
+- **20 s of the real scenario came to 9.9 MB of trace.** T11 needed 449 MB for 6 s of the whole kernel. The MMC code ran for 7.0 s of the 20.
+- **It indexes whole:** 10 s and 1 GB of RAM, 1.32 M Perfetto slices, 0 import errors, stacks 5–8 deep.
+- **Where the eMMC driver's instructions go:** `sdhci_irq` 13 %, `sdhci_prepare_dma` 7 %, `sdhci_send_command` 7 %, `__sdhci_set_timeout` 6 %, and the i.MX eSDHC register accessors (`esdhc_writew_le`, `esdhc_readl_le`, `esdhc_writel_le`) 15 % together. Then the `mmc_blk` request path: `mmc_blk_data_prep`, `mmc_mq_queue_rq`, `mmc_blk_rw_rq_prep`, `__mmc_claim_host`.
+- **Who runs it, as a share of each core's time in the driver:**
+  - On core 0, the idle task holds 51 %: the eMMC interrupt is routed to CPU0 only, so its handler runs there. The completion kworker holds 28 %.
+  - On the other cores it's `sha256sum` and `find`, submitting their reads through blk-mq.
+- **A trap found on the way:**
+  - `summary`'s chunks first lacked `ranges.txt`, so the filtered trace was read as an unfiltered one. Its call stacks never unwound, and every task switch reopened them all: 12.8 M rows from one 2 MB chunk, and 4 GB per worker.
+  - Chunks and cuts now carry it, and the stack is capped at 256 levels: the real maximum is 52.
+
 ## 9. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known

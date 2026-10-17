@@ -116,7 +116,7 @@ TRACE32 is ahead in **analysis software**, not in access: on this chip it reads 
 | multicore time correlation | **done**: six cores, one Perfetto track each, aligned on the common timestamps and ending together ([04](04-arm-trace-into-dram.md) §7) | cycle counts on all cores at once (bandwidth: use filters or stall) |
 | code coverage | — | mark every executed range against `vmlinux`'s functions/lines |
 | OS awareness (tasks) | **done**: the PID from CONTEXTIDR_EL2 (traced as the VMID), names from `/proc/*/comm`, a tasks track per core, one call stack per task (§5b) | the user programs' own functions: per-process images from `/proc/PID/maps` |
-| triggers, filters | — | address-range include/exclude (TRCVIIECTLR + TRCACVRn), start/stop on an address |
+| triggers, filters | **address-range include filters** (`RANGES=`): one driver for 20 s in 9.9 MB ([04](04-arm-trace-into-dram.md) §8.4) | start/stop on an address (TRCVISSCTLR), exclude ranges |
 
 **Practical order:**
 1. ~~Per-process tracks~~ (done, §5b).

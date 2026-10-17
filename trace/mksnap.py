@@ -61,6 +61,8 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--pids', help="'PID NAME' lines collected on the board while tracing (/proc/*/comm): "
                     'kept as pids.txt, tracetool names the tasks with it')
+    ap.add_argument('--ranges', help="LO:HI,...: the address ranges the ETMs were limited to (ocd.sh RANGES): "
+                    "tracetool then reads every pause in the trace as time outside them")
     ap.add_argument('--no-decode', action='store_true',
                     help='only the snapshot and decode-head.txt: a big capture goes to tracetool.py summary')
     ap.add_argument('--kernel-live', help='the running kernel text (physical _text, length of the first '
@@ -111,6 +113,11 @@ def main():
             f.write('[device]\nname=cpu_%d\nclass=core\ntype=Cortex-A55\n\n[regs]\nPC(size:64)=0\n' % c)
             for i, (name, va, sz) in enumerate(dumps):
                 f.write('\n[dump%d]\nfile=%s\naddress=0x%X\nlength=0x%X\nspace=ANY\n' % (i + 1, name, va, sz))
+    if a.ranges:
+        with open(os.path.join(a.out, 'ranges.txt'), 'w') as f:
+            for r in a.ranges.split(','):
+                lo, hi = r.split(':')
+                f.write('%#x %#x\n' % (int(lo, 0), int(hi, 0)))
     if a.pids:
         with open(os.path.join(a.out, 'pids.txt'), 'w') as f:
             f.writelines(l for l in open(a.pids) if re.match(r'\d+ \S', l))

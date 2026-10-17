@@ -50,10 +50,12 @@ W = 10   # index row: start, end, n_instr, icount_before, kind, depth, func, el,
 # func codes below 0: no symbol, the exception marker (never a row), a core asleep in WFI, kernel code
 # with no image (a module), a task switch (a depth-0 row: closes every frame), user code with no image
 # (F_USER - pid), a task (F_TASK - pid)
-F_UNKNOWN, F_MARK, F_IDLE, F_NOIMG, F_SWITCH, F_USER, F_TASK = -1, -2, -3, -4, -5, -100, -10 ** 9
+F_UNKNOWN, F_MARK, F_IDLE, F_NOIMG, F_SWITCH, F_OUTSIDE, F_USER, F_TASK = -1, -2, -3, -4, -5, -6, -100, -10 ** 9
 # instructions per ns that a timed stretch with nothing to count (user code without an image, WFI)
 # is NOT credited with: the kernel around it is given IPC 1 at 1.8 GHz, the rest of the time is its own
 RATE = 1.8
+# deeper than any real call stack here (47-52 in the busiest real-system windows)
+MAXDEPTH = 256
 
 
 def s64(v):
@@ -120,6 +122,8 @@ def label(f, names, cm):
         return '[JIT or module code: BPF, no image]'
     if f == F_SWITCH:
         return '[task switch]'
+    if f == F_OUTSIDE:
+        return '[outside the traced ranges]'
     if f <= F_TASK:
         return task_name(F_TASK - f, cm)
     if f <= F_USER:
@@ -197,6 +201,8 @@ def _index_source(job):
       a sleep or a user-space stretch over its whole duration."""
     snap, tid, start, count = job
     syms, core, s = _SYMS, tid - 0x10, _Src()
+    # an address-filtered trace (mksnap.py --ranges): every pause is time outside the ranges
+    filtered = os.path.exists(os.path.join(snap, 'ranges.txt'))
     p = subprocess.Popen([OCSD, '-ss_dir', snap, '-decode_only', '-logstdout', '-no_time_print', '-id', '%#x' % tid],
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     rows = array.array('q')   # W columns, see W
@@ -208,6 +214,8 @@ def _index_source(job):
     def enter(f):
         """the stack once control reached f, given how the previous range left"""
         stack = s.stack
+        if len(stack) > MAXDEPTH:
+            del stack[:len(stack) - MAXDEPTH]     # a trace read wrongly; keep it from blowing up
         if s.pending == K_CALL:
             stack.append(f)
         elif s.pending == K_RET:
@@ -277,6 +285,13 @@ def _index_source(job):
                 if s.icount:
                     gaps.extend((core, s.icount))
                 s.stack, s.pending, s.credit = [], K_JUMP, None
+            elif s.icount and filtered:
+                # outside the ranges (or asleep, or in user code): one row, no task (its time is not
+                # the task's time in the ranges), and the stack starts again where the trace resumes
+                pid, s.pid = s.pid, -1
+                add(0, 0, 0, 1, F_OUTSIDE, credit=True)
+                s.pid = pid
+                s.stack, s.pending = [], K_JUMP
             elif s.icount and s.el == 0:
                 # user code not traced (TRCVICTLR excludes EL0): the trace stopped at the return to
                 # user space and resumes at the next kernel entry, on its vector, with no EXCEPTION
@@ -508,6 +523,7 @@ def events(ix, t_base):
     comparing float times (absolute times near 1.8e9 us rounded a parent's end past its tail-called
     child's start: Perfetto import errors)."""
     fr = np.array(ix.frames(), dtype=np.int64).reshape(-1, 4)
+    fr = fr[fr[:, 3] != F_OUTSIDE]      # a filtered trace's time outside its ranges: left empty
     s0, s1, d, f = fr.T
     nb = len(fr)
     ic = np.concatenate([s0, s1])
@@ -696,6 +712,9 @@ def _fold(ix, agg, a, prefix):
 
 
 _COMMS = {}   # set before the summary workers fork
+# a snapshot's side files that its chunks and cuts must carry: without ranges.txt a filtered trace
+# was read as an unfiltered one, its call stacks never unwound and a 2 MB chunk made 12.8 M rows
+SIDE = ('pids.txt', 'ranges.txt')
 
 
 def _summary_job(job):
@@ -748,7 +767,7 @@ def cmd_summary(a):
     size, ch = os.path.getsize(data), a.chunk_mb << 20
     nch = (size + ch - 1) // ch
     cdir = os.path.join(a.snap, 'chunks')
-    links = [f for f in os.listdir(a.snap) if f.endswith('.ini') or f == 'pids.txt' or
+    links = [f for f in os.listdir(a.snap) if f.endswith('.ini') or f in SIDE or
              (f.endswith('.bin') and f != 'cstrace.bin')]
     with open(data, 'rb') as fi:
         for k in range(nch):
@@ -847,7 +866,7 @@ def cmd_cut(a):
     os.makedirs(a.out, exist_ok=True)
     src = os.path.abspath(a.snap)
     for f in os.listdir(a.snap):
-        if f.endswith('.ini') or f == 'pids.txt' or (f.endswith('.bin') and f != 'cstrace.bin'):
+        if f.endswith('.ini') or f in SIDE or (f.endswith('.bin') and f != 'cstrace.bin'):
             if not os.path.lexists(os.path.join(a.out, f)):
                 os.symlink(os.path.join(src, f), os.path.join(a.out, f))
     with open(os.path.join(a.snap, 'cstrace.bin'), 'rb') as fi:

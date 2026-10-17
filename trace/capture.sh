@@ -8,6 +8,7 @@
 # -> trace/etr-NAME.bin, trace/ss-NAME/ (summary.json, tasks.perfetto-trace, trace.folded)
 # Needs Linux from linux.sh (cpuidle.off=1, the board/mkdtb.sh DTB), the board's USB-C on this PC.
 # Env: TTY (the A55 console, /dev/ttyACM2), VICTLR (0x100201: no user code; 0x201: all),
+#      RANGES ("LO:HI ...": only these kernel address ranges, e.g. one driver; docs/04 §8.4),
 #      SUDO_PASS (for the raw USB disk; or SUDO_ASKPASS)
 set -eo pipefail
 NAME=$1 SECS=${2:-6} CMD=${3:-}
@@ -62,5 +63,6 @@ KT=$(ls -t "$H"/trace/ktext-live-*.bin 2>/dev/null | head -1)
 [ -n "$KT" ] || echo "no live kernel text (ocd.sh ktext): decoding against vmlinux"
 python3 "$H/trace/mksnap.py" --etr "$H/trace/etr-$NAME.bin" --base 0x400000000 --rwp "$RWP" $FULLARG \
 	--log "$LOG" --configr 0x8880 --cores 0,1,2,3,4,5 --pids "$H/logs/trace-$NAME-pids.txt" \
-	${KT:+--kernel-live "$KT"} --no-decode --out "$H/trace/ss-$NAME" | tail -2
+	${KT:+--kernel-live "$KT"} ${RANGES:+--ranges "$(echo $RANGES | tr ' ' ',')"} --no-decode \
+	--out "$H/trace/ss-$NAME" | tail -2
 (cd "$H/trace" && ./tracetool.py summary "ss-$NAME" | grep -vE '^  [0-9]+ / ')

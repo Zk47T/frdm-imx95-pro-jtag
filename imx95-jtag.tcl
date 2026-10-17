@@ -423,7 +423,11 @@ proc cs_sink_start {base size} {
 #                 decoded without the programs' images anyway, and which takes much of the bandwidth
 #   cs_stallctlr  TRCSTALLCTLR: 0 never stalls; 0x10C (ISTALL, LEVEL 3) lets the ETM hold its core
 #                 back when its FIFO fills, instead of overflowing (TRCIDR3.STALLCTL = 1 here)
+#   cs_ranges     {{LO HI} ...}: trace only inside these address ranges (up to 4: TRCIDR4.NUMACPAIRS),
+#                 HI the last address included; empty: everywhere. Comparator pair n is TRCACVR 2n
+#                 and 2n+1 with TRCACATR = 0 (instruction address, every EL), INCLUDE bit n of TRCVIIECTLR
 if { ![info exists cs_victlr] } { set cs_victlr 0x201 }
+if { ![info exists cs_ranges] } { set cs_ranges {} }
 if { ![info exists cs_stallctlr] } { set cs_stallctlr 0x0 }
 
 # One core's ETM: OS unlock, keep powered, program, enable.
@@ -445,7 +449,21 @@ proc cs_etm_start {core traceid {configr 0x0} {ccctlr 0x0}} {
 	cs_w [expr {$e + 0x03c}] 0
 	cs_w [expr {$e + 0x040}] $traceid
 	cs_w [expr {$e + 0x080}] $::cs_victlr
-	cs_w [expr {$e + 0x084}] 0
+	set inc 0
+	set n 0
+	foreach r $::cs_ranges {
+		foreach {k a} [list 0 [lindex $r 0] 1 [lindex $r 1]] {
+			set acv [expr {$e + 0x400 + 8 * (2 * $n + $k)}]
+			set aca [expr {$e + 0x480 + 8 * (2 * $n + $k)}]
+			cs_w $acv [expr {$a & 0xffffffff}]
+			cs_w [expr {$acv + 4}] [expr {($a >> 32) & 0xffffffff}]
+			cs_w $aca 0
+			cs_w [expr {$aca + 4}] 0
+		}
+		set inc [expr {$inc | (1 << $n)}]
+		incr n
+	}
+	cs_w [expr {$e + 0x084}] $inc
 	cs_w [expr {$e + 0x088}] 0
 	cs_w [expr {$e + 0x004}] 1
 	cs_wait [expr {$e + 0x00c}] 0x1 0x0

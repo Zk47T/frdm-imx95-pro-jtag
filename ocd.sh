@@ -90,7 +90,9 @@ trace-all)
 	# programs' images, it took half the bandwidth, and without it a busy real system had 0 overflows
 	# instead of 76,000 (T10/T11, docs/04 §8.3). VICTLR=0x201: trace it too (with mksnap.py --elf for
 	# a static program). STALL=0x10C: ETM stall instead of overflow (imx95-jtag.tcl)
-	ocd -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
+	# RANGES="LO:HI ...": trace only inside these address ranges (HI included; up to 4)
+	RL=""; for r in ${RANGES:-}; do RL="$RL {${r%%:*} ${r##*:}}"; done
+	ocd -c "set cs_ranges {$RL}" -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
 	    -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' \
 	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880}" -c "sleep ${4:-1500}" \
 	    -c 'cs_multi_stop {0 1 2 3 4 5}' -c shutdown ;;
