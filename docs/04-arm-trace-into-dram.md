@@ -338,6 +338,33 @@ SUDO_PASS=... RANGES="0xffff800080cdd6a0:0xffff800080d244bc" trace/capture.sh t1
   - `summary`'s chunks first lacked `ranges.txt`, so the filtered trace was read as an unfiltered one. Its call stacks never unwound, and every task switch reopened them all: 12.8 M rows from one 2 MB chunk, and 4 GB per worker.
   - Chunks and cuts now carry it, and the stack is capped at 256 levels: the real maximum is 52.
 
+### 8.5 How long each call takes: `tracetool.py stats`, and cycle counts in a filter (T15) `[V]`
+
+**`tracetool.py stats SNAP [--match RE] [--window A B]`** gives per function: calls, the total, the median, p99 and longest call (inclusive), and the wall median.
+
+- **The udev storm (T11, 20 ms, timestamps):**
+  - `openat` 11,657 calls, median 1.5 µs, p99 20 µs.
+  - `exit_group` 26 calls, median 415 µs: tearing a short-lived process down.
+  - `sdhci_irq` median 5.6 µs. `__switch_to` median 0.6 µs.
+  - These durations are interpolated between timestamps by instruction count, so calls of a few dozen instructions are rough.
+
+**Exact durations need cycle counts:**
+- Over the whole system they cost too much bandwidth. Inside one driver's range they're cheap.
+- T15 is T13 with `CONFIGR=0x8890 CCCTLR=4`: 20 s of the eMMC drivers came to 17.8 MB instead of 9.9 MB.
+- A filtered trace's cycle counter stops outside its ranges (`CYCLE_COUNT [CC=0]` after every `TRACE_ON`). So its timeline stays on the timestamps, and the cycles time only what ran inside.
+
+| T15, eMMC drivers, 20 s | Calls | Inside the driver, median | p99 | Max | Wall median |
+|---|---|---|---|---|---|
+| `sdhci_irq` | 11,394 (2 per request) | **1.41 µs** | 7.0 µs | 14.3 µs | 3.21 µs |
+| `mmc_mq_queue_rq` | 6,035 | 10.5 µs | 27.0 µs | 37.2 µs | 11.2 µs |
+| `mmc_blk_mq_complete_work` | 5,207 | 5.2 µs | 10.3 µs | 37.7 µs | 10.9 µs |
+
+- **T13, timestamps only, agrees:** `sdhci_irq` 11,373 calls, median 3.22 µs.
+- **A trap in filtered traces:** a call leaves the range (a `bl` to a lock helper) and the trace resumes at its return address.
+  - Restarting the stack at every such pause cut each `sdhci_irq` into pieces: 45,580 "calls".
+  - The caller now stays open across a call out of the range, with the time outside under it. Resuming in another function nests it as a callback.
+- **Wall times include sleeping:** `mmc_mq_queue_rq`'s longest wall time, 0.56 s in T13, is most likely a task waiting in `__mmc_claim_host` while other readers had the host.
+
 ## 9. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known

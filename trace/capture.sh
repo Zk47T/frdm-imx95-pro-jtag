@@ -9,11 +9,12 @@
 # Needs Linux from linux.sh (cpuidle.off=1, the board/mkdtb.sh DTB), the board's USB-C on this PC.
 # Env: TTY (the A55 console, /dev/ttyACM2), VICTLR (0x100201: no user code; 0x201: all),
 #      RANGES ("LO:HI ...": only these kernel address ranges, e.g. one driver; docs/04 §8.4),
+#      CONFIGR (0x8880: timestamps + PID; 0x8890 with CCCTLR=4: cycle counts too, for exact durations),
 #      M7=1 (the M7's ETM too: its firmware on the same time axis; its code read first, ocd.sh m7code),
 #      SUDO_PASS (for the raw USB disk; or SUDO_ASKPASS)
 set -eo pipefail
 NAME=$1 SECS=${2:-6} CMD=${3:-}
-[ -n "$NAME" ] || { sed -n '2,14p' "$0"; exit 2; }
+[ -n "$NAME" ] || { sed -n '2,15p' "$0"; exit 2; }
 M7ARG=()
 H=$(cd "$(dirname "$0")/.." && pwd)
 S=/home/zk47/Learning/yocto-imx95-pro/sources/meta-fastboot-imx95/scripts
@@ -34,7 +35,7 @@ if [ -n "$M7" ]; then
 	M7ARG=(--m7 "$H/trace/m7-itcm-$NAME.bin")
 fi
 echo "== trace: $SECS s, all six A55s (VICTLR ${VICTLR:-0x100201})${M7:+ and the M7}, while: $CMD"
-(cd "$H" && JTAG_KHZ=30000 ./ocd.sh trace-all 0x400000000 0x80000000 $((SECS * 1000)) 0x8880 > "$OUT" 2>&1) &
+(cd "$H" && JTAG_KHZ=30000 ./ocd.sh trace-all 0x400000000 0x80000000 $((SECS * 1000)) "${CONFIGR:-0x8880}" > "$OUT" 2>&1) &
 OCD=$!
 for _ in $(seq 120); do grep -q 'cs: tracing' "$OUT" && break; sleep 0.5; done
 grep -q 'cs: tracing' "$OUT" || { cat "$OUT"; echo "the trace did not start"; exit 1; }
@@ -68,7 +69,7 @@ Q "sh $BDIR/usbexport.sh stop" >/dev/null || true
 KT=$(ls -t "$H"/trace/ktext-live-*.bin 2>/dev/null | head -1)
 [ -n "$KT" ] || echo "no live kernel text (ocd.sh ktext): decoding against vmlinux"
 python3 "$H/trace/mksnap.py" --etr "$H/trace/etr-$NAME.bin" --base 0x400000000 --rwp "$RWP" $FULLARG \
-	--log "$LOG" --configr 0x8880 --cores 0,1,2,3,4,5 --pids "$H/logs/trace-$NAME-pids.txt" \
+	--log "$LOG" --configr "${CONFIGR:-0x8880}" --cores 0,1,2,3,4,5 --pids "$H/logs/trace-$NAME-pids.txt" \
 	${KT:+--kernel-live "$KT"} ${RANGES:+--ranges "$(echo $RANGES | tr ' ' ',')"} "${M7ARG[@]}" --no-decode \
 	--out "$H/trace/ss-$NAME" | tail -2
 (cd "$H/trace" && ./tracetool.py summary "ss-$NAME" | grep -vE '^  [0-9]+ / ')

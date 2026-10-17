@@ -94,7 +94,8 @@ trace-all)
 	# a static program). STALL=0x10C: ETM stall instead of overflow (imx95-jtag.tcl)
 	# RANGES="LO:HI ...": trace only inside these address ranges (HI included; up to 4)
 	RL=""; for r in ${RANGES:-}; do RL="$RL {${r%%:*} ${r##*:}}"; done
-	# M7=1: the M7's ETM too (trace ID 0x20, timestamps if CONFIGR has them), into the same buffer
+	# M7=1: the M7's ETM too (trace ID 0x20, timestamps if CONFIGR has them), into the same buffer.
+	# CONFIGR 0x8890 + CCCTLR=4: cycle counts too (exact durations; best with RANGES, for bandwidth)
 	M7A=(); M7B=(); M7C=()
 	if [ -n "$M7" ]; then
 		M7A=(-c 'imx95.m7 arp_examine' -c 'imx95.m7 arp_poll' -c m7_etm_ids)
@@ -103,7 +104,7 @@ trace-all)
 	fi
 	ocd -c "set cs_ranges {$RL}" -c "set cs_victlr ${VICTLR:-0x100201}" -c "set cs_stallctlr ${STALL:-0x0}" "${A55[@]}" \
 	    -c 'imx95.apb arp_examine' -c 'foreach c {0 1 2 3 4 5} { etm_ids $c }' "${M7A[@]}" \
-	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880}" "${M7B[@]}" -c "sleep ${4:-1500}" \
+	    -c "cs_multi_start {0 1 2 3 4 5} ${2:-0xf1000000} ${3:-0x1000000} ${5:-0x8880} ${CCCTLR:-0}" "${M7B[@]}" -c "sleep ${4:-1500}" \
 	    -c 'cs_multi_stop {0 1 2 3 4 5}' "${M7C[@]}" -c shutdown ;;
 top)
 	# top [SECS] [CORES]: each core's PC sample register with CONTEXTIDR_EL2 (the PID) of the same

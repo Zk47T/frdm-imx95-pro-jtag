@@ -15,6 +15,8 @@
                                                    cores in parallel -> time per task, folded stacks,
                                                    every task over the whole capture in Perfetto
   tracetool.py cut SNAP OUT --ms FROM TO          a window of a big capture as its own snapshot
+  tracetool.py stats SNAP [--match RE] [--window FROM TO] [--core C]
+                                                   per function: calls, total, median/p99/max duration
 --window FROM TO: milliseconds from the capture's start (the first traced instruction of any core),
 the same axis as the Perfetto timeline and index's span table.
 
@@ -57,6 +59,8 @@ F_UNKNOWN, F_MARK, F_IDLE, F_NOIMG, F_SWITCH, F_OUTSIDE, F_USER, F_TASK = -1, -2
 # instructions per ns that a timed stretch with nothing to count (user code without an image, WFI)
 # is NOT credited with: the kernel around it is given IPC 1 at 1.8 GHz, the rest of the time is its own
 RATE = 1.8
+# the A55 clock, measured against the timestamps with cycle counts on (T5, docs/08 §3)
+A55_GHZ = 1.8073
 # deeper than any real call stack here (47-52 in the busiest real-system windows)
 MAXDEPTH = 256
 
@@ -156,6 +160,7 @@ class _Src:
         self.next_pc = None       # M7: the next instruction after a not-taken range (an exception's return)
         self.exc = []             # M7: the exceptions being handled, innermost last
         self.resume = False       # M7: the next range is a task resumed by PendSV
+        self.excursion = False    # filtered: the trace resumed after a call out of the ranges
 
 
 def trace_ids(snap):
@@ -296,6 +301,10 @@ def _index_source(job):
         if m:
             st, en, n = int(m.group(1), 16), int(m.group(2), 16), int(m.group(3))
             f = syms.idx(st)
+            if s.excursion:
+                s.excursion = False
+                if s.stack and s.stack[-1] != f:
+                    s.pending = K_CALL       # resumed in another function: a callback, nested
             if s.resume:
                 # an RTOS task switch on the M7 (no PID there): a task resumes exactly where PendSV
                 # switched it out, so its stack was saved under that address. One shared stack piled
@@ -361,12 +370,20 @@ def _index_source(job):
                     gaps.extend((core, s.icount))
                 s.stack, s.pending, s.credit = [], K_JUMP, None
             elif s.icount and filtered:
-                # outside the ranges (or asleep, or in user code): one row, no task (its time is not
-                # the task's time in the ranges), and the stack starts again where the trace resumes
+                # outside the ranges (or asleep, or in user code): a row with no task (its time is not
+                # the task's time in the ranges). After a call out of the ranges the trace resumes at
+                # the return address: the caller stays open, with the time outside under it (a
+                # callback into the ranges nests there too). After a return or a jump out, the stack
+                # starts again. (Resetting it every time cut each sdhci_irq into pieces, 2026-10-17.)
                 pid, s.pid = s.pid, -1
-                add(0, 0, 0, 1, F_OUTSIDE, credit=True)
+                if s.pending == K_CALL and s.stack:
+                    add(0, 0, 0, len(s.stack) + 1, F_OUTSIDE, credit=True)
+                    s.excursion = True
+                else:
+                    add(0, 0, 0, 1, F_OUTSIDE, credit=True)
+                    s.stack = []
                 s.pid = pid
-                s.stack, s.pending = [], K_JUMP
+                s.pending = K_JUMP
             elif s.icount and s.el == 0 and not m7:
                 # user code not traced (TRCVICTLR excludes EL0): the trace stopped at the return to
                 # user space and resumes at the next kernel entry, on its vector, with no EXCEPTION
@@ -492,12 +509,17 @@ def load(snap, gips):
         return np.column_stack([np.zeros(len(v), np.int64), v]) if v.shape[1] == 2 else v
     ts, cc = per_core('ts'), per_core('cc')
     cm = comms(snap)
+    filtered = os.path.exists(os.path.join(snap, 'ranges.txt'))
     tbf = os.path.join(snap, 'timebase.txt')
     tb = float(open(tbf).read()) if os.path.exists(tbf) else None
     out = {}
     for c in sorted(set(int(x) for x in rows[:, 8])):
+        # a filtered trace's cycle counts stop outside its ranges: its timeline stays on the timestamps,
+        # and the cycle counts only time what ran inside (cycles(), stats)
+        cc_c = cc[cc[:, 0] == c][:, 1:]
         out[c] = CoreIndex(c, rows[rows[:, 8] == c][:, [0, 1, 2, 3, 4, 5, 6, 7, 9]], ts[ts[:, 0] == c][:, 1:],
-                           cc[cc[:, 0] == c][:, 1:], names, gips, cm)
+                           cc_c if not filtered else np.zeros((0, 2), np.int64), names, gips, cm)
+        out[c].cc_all = cc_c
         out[c].tb = tb
     return out
 
@@ -508,6 +530,7 @@ class CoreIndex:
         self.core, self.r, self.ts, self.cc, self.names, self.gips = core, rows, ts, cc, names, gips
         self.comms = cm or {}
         self.tb = None            # the time 0 of the capture this was cut from (load(): timebase.txt)
+        self.cc_all = cc          # the cycle counts even when the timeline doesn't use them (filtered)
         self.unit = None
         if len(self.ts) >= 2 and self.ts[-1, 1] > self.ts[0, 1]:
             self.unit = 'ETM timestamps (system counter x 256)'
@@ -809,8 +832,9 @@ def _summary_job(job):
         out['ts'] = (int(r['ts'][0, 2]), int(r['ts'][-1, 2]))
     if not len(rows):
         return out
-    ix = CoreIndex(r['core'], rows[:, [0, 1, 2, 3, 4, 5, 6, 7, 9]], r['ts'][:, 1:], r['cc'][:, 1:], _SYMS.name, 2.5,
-                   _COMMS)
+    filtered = os.path.exists(os.path.join(cdir, 'ranges.txt'))     # its cycles stop outside the ranges
+    ix = CoreIndex(r['core'], rows[:, [0, 1, 2, 3, 4, 5, 6, 7, 9]], r['ts'][:, 1:],
+                   r['cc'][:, 1:] if not filtered else np.zeros((0, 2), np.int64), _SYMS.name, 2.5, _COMMS)
     out['n'] = int(rows[rows[:, 6] >= F_UNKNOWN, 2].sum())
     out['unit'] = ix.unit
     t0, t1, pid = ix.tasks()
@@ -957,6 +981,56 @@ def cmd_cut(a):
     open(os.path.join(a.out, 'timebase.txt'), 'w').write('%r\n' % s['t0_ns'])
     print('%s: bytes %#x..%#x of %s (chunks %d..%d: %g .. %g ms)' % (a.out, off, end, a.snap, ks[0][0], ks[-1][0],
                                                                     ks[0][3], ks[-1][4]))
+
+
+def cmd_stats(a):
+    """How long each function's calls take: per function the calls, the total, and the median, p99 and
+    longest call (inclusive: callees count). Activations cut by the window's or the trace's edges are
+    left out. Durations come from the time axis (ix.unit): cycle-accurate with TRCCONFIGR.CCI,
+    otherwise interpolated between timestamps by instruction count (fine for long calls, rough for
+    calls of a few dozen instructions)."""
+    cores, t_base = select(a, load(a.snap, a.gips))
+    pat = re.compile(a.match) if a.match else None
+    per = {}
+    unit = set()
+    for c, ix in cores.items():
+        if a.core is not None and c != a.core:
+            continue
+        fr = np.array(ix.frames(), dtype=np.int64).reshape(-1, 4)
+        if not len(fr):
+            continue
+        first, last = int(ix.r[0, 3]), int(ix.r[-1, 3] + ix.r[-1, 2])
+        fr = fr[(fr[:, 3] >= 0) & (fr[:, 0] > first) & (fr[:, 1] < last)]
+        wall = ix.t_ns_v(fr[:, 1]) - ix.t_ns_v(fr[:, 0])
+        if len(ix.cc_all) >= 2:
+            # cycle counts: exact; in a filtered trace they count only inside its ranges
+            cyc = lambda ic_: np.interp(ic_.astype(np.float64), ix.cc_all[:, 0], ix.cc_all[:, 1])
+            dur = (cyc(fr[:, 1]) - cyc(fr[:, 0])) / A55_GHZ
+            unit.add('CPU cycles at %.4f GHz%s' % (A55_GHZ, ' (inside the ranges only; "wall": timestamps)'
+                                                   if os.path.exists(os.path.join(a.snap, 'ranges.txt')) else ''))
+        else:
+            dur = wall
+            unit.add(ix.unit or 'instructions at %.1f GIPS' % a.gips)
+        o = np.argsort(fr[:, 3], kind='stable')
+        fs, ds, ws = fr[o, 3], dur[o], wall[o]
+        cut = np.flatnonzero(np.diff(fs)) + 1
+        for f_, d_, w_ in zip(np.split(fs, cut), np.split(ds, cut), np.split(ws, cut)):
+            n = ix.name(int(f_[0]))
+            if pat and not pat.search(n):
+                continue
+            per.setdefault(n, []).append((d_, w_))
+    rows = []
+    for n, ds in per.items():
+        d = np.concatenate([x for x, _ in ds])
+        w = np.concatenate([y for _, y in ds])
+        rows.append((d.sum(), n, len(d), np.median(d), np.percentile(d, 99), d.max(), np.median(w)))
+    rows.sort(reverse=True)
+    print('time axis: %s%s' % (', '.join(sorted(unit)), '; window %g .. %g ms' % tuple(a.window) if a.window else ''))
+    print('%-44s %9s %11s %10s %10s %10s %10s' % ('function', 'calls', 'total ms', 'median us', 'p99 us', 'max us',
+                                                  'wall med'))
+    for tot, n, cnt, med, p99, mx, wm in rows[:a.top]:
+        print('%-44s %9d %11.3f %10.2f %10.2f %10.2f %10.2f' % (n[:44], cnt, tot / 1e6, med / 1e3, p99 / 1e3, mx / 1e3,
+                                                                wm / 1e3))
 
 
 def cmd_nav(a):
@@ -1148,6 +1222,11 @@ def main():
                            help='proto: Perfetto\'s own format, compact (default); json: Chrome trace events')
         if c == 'folded':
             p.add_argument('--instructions', action='store_true', help='weight by instructions even with cycle counts')
+    p = sp.add_parser('stats'); p.add_argument('snap'); p.add_argument('--gips', type=float, default=2.5)
+    p.add_argument('--window', nargs=2, type=float, metavar=('FROM', 'TO'))
+    p.add_argument('--match', help='only functions whose name matches this regular expression')
+    p.add_argument('--core', type=int, help='one core only (16: the M7)')
+    p.add_argument('--top', type=int, default=25)
     p = sp.add_parser('summary'); p.add_argument('snap')
     p.add_argument('--chunk-mb', type=int, default=16, help='chunk size (each chunk x core is one job)')
     p.add_argument('--jobs', type=int, default=max(1, min(12, (os.cpu_count() or 2) - 2)))
@@ -1158,7 +1237,7 @@ def main():
     p.add_argument('--core', type=int, help='which core to step through (default: the lowest traced)')
     a = ap.parse_args()
     {'index': cmd_index, 'perfetto': cmd_perfetto, 'speedscope': cmd_speedscope, 'folded': cmd_folded,
-     'summary': cmd_summary, 'cut': cmd_cut, 'nav': cmd_nav}[a.cmd](a)
+     'summary': cmd_summary, 'cut': cmd_cut, 'stats': cmd_stats, 'nav': cmd_nav}[a.cmd](a)
 
 
 if __name__ == '__main__':

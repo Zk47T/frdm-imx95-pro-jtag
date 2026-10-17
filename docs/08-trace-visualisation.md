@@ -111,7 +111,7 @@ TRACE32 is ahead in **analysis software**, not in access: on this chip it reads 
 | TRACE32 feature | Here | To build |
 |---|---|---|
 | trace listing with source, back and forth | `tracetool nav` (text) | a GUI pane synced with the timeline |
-| function timing, nesting, statistics | Perfetto, speedscope, folded/flame graph | per-function min/max/avg tables (from `index.npz`) |
+| function timing, nesting, statistics | Perfetto, speedscope, folded/flame graph; **`tracetool.py stats`**: calls, total, median/p99/max per function, cycle-exact inside a filter ([04](04-arm-trace-into-dram.md) §8.5) | exclusive (self) time |
 | CTS: registers and variables at past points | — (no data trace) | re-execute from a snapshot: halt at the start (registers + memory windows), then emulate (e.g. Unicorn) along the traced path, checking every branch against the trace |
 | multicore time correlation | **done**: six cores, one Perfetto track each, aligned on the common timestamps and ending together ([04](04-arm-trace-into-dram.md) §7) | cycle counts on all cores at once (bandwidth: use filters or stall) |
 | code coverage | — | mark every executed range against `vmlinux`'s functions/lines |
