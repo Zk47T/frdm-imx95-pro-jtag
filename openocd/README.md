@@ -32,6 +32,8 @@ Tested on 2026-10-16 with OpenOCD from git (`0.12.0+dev-02711`), with Linux runn
 4. **Boot the board.**
    - The debug port is open in serial-download mode, and with U-Boot or Linux running. A closed part needs the ELE's debug authentication.
    - **Don't examine the A55s in serial-download mode:** the cluster is off, and the access port stays wedged until a power cycle.
+   - **The M7 isn't running in serial-download mode either:** its access port answers only WAIT ("Timeout during WAIT recovery"). A new OpenOCD session recovers from that.
+   - **`init` alone is safe in serial-download mode:** it reads only the access ports' CFG registers. Tested.
    - With Linux, boot with `cpuidle.off=1` so all six cores stay powered.
 5. **Run OpenOCD** (from this repository's root):
    ```
