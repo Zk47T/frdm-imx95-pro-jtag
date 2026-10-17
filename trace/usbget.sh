@@ -1,14 +1,17 @@
 #!/bin/bash
-# usbget.sh OUT [WAIT_S]: read the trace disk that board/usbexport.sh shows on the board's USB-C
-# into OUT, at the USB link's speed. The disk is raw (no file system) and root:disk, hence sudo
-# (sudo -A when SUDO_ASKPASS is set). Compare the printed sha256 with 'sha256sum /tmp/trace.bin'
-# on the board.
+# usbget.sh OUT [WAIT_S] [SERIAL]: read the trace disk that board/usbexport.sh shows on the board's
+# USB-C into OUT, at the USB link's speed. SERIAL: the one usbexport.sh printed; without it, any
+# such disk (right after a new export, udev may not have removed the previous one's link yet:
+# 2026-10-17, dd then failed on a vanished /dev/sda). The disk is raw (no file system) and
+# root:disk, hence sudo (sudo -A when SUDO_ASKPASS is set). Compare the printed sha256 with
+# 'sha256sum /tmp/trace.bin' on the board.
 set -eo pipefail
 OUT=$1
-[ -n "$OUT" ] || { sed -n '2,5p' "$0"; exit 2; }
+[ -n "$OUT" ] || { sed -n '2,7p' "$0"; exit 2; }
 for _ in $(seq "${2:-30}"); do
-	D=$(ls /dev/disk/by-id/usb-NXP_IMX95_TRACE_* 2>/dev/null | grep -v -- -part | head -1) || true
-	[ -n "$D" ] && break
+	D=$(ls /dev/disk/by-id/usb-NXP_IMX95_TRACE_${3:-}* 2>/dev/null | grep -v -- -part | head -1) || true
+	[ -n "$D" ] && [ -b "$(readlink -f "$D")" ] && break
+	D=
 	sleep 1
 done
 [ -n "$D" ] || { echo "no /dev/disk/by-id/usb-NXP_IMX95_TRACE_*: usbexport.sh running? the board's USB-C on this PC?"; exit 1; }

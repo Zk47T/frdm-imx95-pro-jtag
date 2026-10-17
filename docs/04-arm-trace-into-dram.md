@@ -293,6 +293,15 @@ PC:     ./ocd.sh read 0xf1000000 0x1000000 trace/etr-t9.bin
   - Bursts from several cores running dense code at once overrun the shared path (a 16 KB ETF FIFO, one ETR).
   - The task timeline is unaffected: PIDs and timestamps keep coming. The instruction-level detail has holes.
 
+**All of it in one command:**
+```
+SUDO_PASS=... trace/capture.sh NAME SECS ['board command']
+```
+1. It traces SECS s of all six A55s, kernel only, while the command runs on the board. The default command is `scenario-real.sh`'s workload, and a PID collector runs alongside.
+2. It reads the buffer out over USB, checks the SHA-256 on both sides, builds the snapshot against the newest live kernel text, and runs `tracetool.py summary`.
+3. The result is `trace/ss-NAME/` with `summary.json`, `tasks.perfetto-trace` and `trace.folded`.
+4. A test: 4 s around a `find | md5sum` and `journalctl` came to 13 MB, 2,123 task switches and 0 overflows.
+
 **The fix (T11): don't trace user code.** TRCVICTLR = 0x100201 excludes non-secure EL0. T11 ran the same scenario for the same 6 s:
 
 | | T10: everything traced | T11: user code excluded |

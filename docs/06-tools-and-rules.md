@@ -20,6 +20,7 @@
 | `board/physwin.c` | copy, read, write or checksum physical memory through `/dev/mem` (no-map regions only) |
 | `board/scenario-real.sh [done]` | real work for a trace on the board's own image (sha256sum over `/usr`, udevadm, journalctl, systemctl), a PID map and `/proc/interrupts` before and after |
 | `board/usbexport.sh PHYS LEN \| stop` | on the board (`/mnt`): a trace buffer as a read-only USB disk on the board's USB-C (41 MiB/s) |
+| `trace/capture.sh NAME SECS [CMD]` | a whole-system trace in one command: trace-all while CMD runs on the board, PID map, USB readout with SHA-256 check, snapshot, summary |
 | `trace/jtagtop.py SAMPLES` | the report for `ocd.sh top`: per core the busy share and tasks, the busiest tasks and functions; `--tty` or `--pids` for names, `--elf` for user code |
 | `trace/usbget.sh OUT` | on the PC: read that disk into OUT, with its speed and SHA-256 |
 | `board/i2cbang.sh SDA SCL ADDR` | one I2C address probe clocked by hand through GPIO2, printing every pin state |
