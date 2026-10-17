@@ -61,6 +61,8 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--pids', help="'PID NAME' lines collected on the board while tracing (/proc/*/comm): "
                     'kept as pids.txt, tracetool names the tasks with it')
+    ap.add_argument('--no-decode', action='store_true',
+                    help='only the snapshot and decode-head.txt: a big capture goes to tracetool.py summary')
     ap.add_argument('--kernel-live', help='the running kernel text (physical _text, length of the first '
                     'vmlinux segment), read from DRAM: ocd.sh ktext')
     a = ap.parse_args()
@@ -145,6 +147,11 @@ def main():
     for ln, line in enumerate(proc.stdout):
         if ln < 2000:
             head.write(line)
+        elif a.no_decode:
+            proc.kill()
+            head.close()
+            print('decode skipped (--no-decode): tracetool.py summary %s' % a.out)
+            return
         m = re.search(r'OCSD_GEN_TRC_ELEM_(\w+)', line)
         if m:
             kinds[m.group(1)] += 1

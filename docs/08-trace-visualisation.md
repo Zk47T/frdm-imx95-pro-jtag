@@ -27,6 +27,9 @@ trace/tracetool.py index      call stacks rebuilt per core and per task, one dec
                    folded     stacks per core and task, by cycles or instructions -> trace.folded -> flamegraph.svg
                    nav        step forward/back, with source, disassembly, call stack
 --window FROM TO (ms from the capture start) on perfetto/speedscope/folded: every core over the same interval
+                   summary    a capture too big to index: chunks x cores in parallel -> time per task,
+                              folded stacks, every task over the whole capture  -> tasks.perfetto-trace
+                   cut        a window of it as its own snapshot, then index/perfetto as above
 ```
 
 **Rebuilding the call stack:**

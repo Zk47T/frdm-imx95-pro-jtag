@@ -248,6 +248,54 @@ PC:     ./ocd.sh read 0xf1000000 0x1000000 trace/etr-t9.bin
 - **Time:** a sleep or a stretch of user code has no instructions to interpolate over. So the next timestamp gives that row the time between the two timestamps, minus what the counted kernel instructions need at 1.8 per ns (IPC 1 at 1.8 GHz).
 - **Not decoded yet:** the user programs' own functions. That needs each process's mappings (`/proc/PID/maps`) and its libraries as images, per PID.
 
+### 8.3 Six seconds of the whole system, out over USB (T10, 2026-10-17) `[V]`
+
+**The capture:**
+- The 2 GB buffer at 0x4_0000_0000, with TS and PID (TRCCONFIGR 0x8880).
+- The scenario started 2.7 s after tracing began, so all of it is inside.
+- **6.07 s of all six cores, 903,521,344 bytes;** the buffer didn't wrap.
+
+**The readout goes through the board's own USB-C, not the debug probe:**
+- `board/usbexport.sh 0x400000000 LEN` copies the region into `/tmp` (RAM) with `physwin`: 17.8 s, 48 MB/s with uncached reads.
+- It then shows the copy as a read-only USB disk: a configfs mass-storage gadget on the dwc3, `4c100000.usb`.
+- `trace/usbget.sh` reads it: **862 MB in 20.8 s, 41 MiB/s**. The link came up as USB 2.0 high speed (480 Mb/s); the controller does USB 3.
+- The SHA-256 is the same on the board and the PC.
+- Over the probe at 266 KiB/s it would take 55 minutes.
+
+**Processing:** this is too big to index (billions of rows), so there are two new commands:
+- `mksnap.py --no-decode` builds the snapshot without the single-process full decode.
+- `tracetool.py summary` cuts the buffer into 16 MB chunks. Each chunk × source is decoded in its own process and reduced at once to time per task, instructions, overflows and folded stacks.
+  - T10: 54 chunks × 6 sources = 324 jobs, 8 minutes on 12 processes, 4.4 GB of RAM.
+  - Checked on T9, cut into 4 MB chunks: the same time per task as the full index, and instructions within 0.5 %. The difference is what each chunk edge loses until the decoder's next sync point.
+
+| Core | Instructions | Overflows | Time per task (6.07 s) |
+|---|---|---|---|
+| 0 | 339 M | 7,250 | idle 83 %, `systemd-udevd` 5 %, `sha256sum` 3 %, `find` 2 %, the eMMC kworker 1 % |
+| 1 | 217 M | 12,080 | idle 88 %, `sha256sum` 2 %, udev workers |
+| 2 | 324 M | 9,912 | idle 76 %, `sha256sum` 9 %, `systemd-udevd`, `systemd`, `kworker/2:3+rcu_gp` |
+| 3 | 307 M | 11,666 | idle 83 %, `sha256sum` 4 %, `sh`, udev workers |
+| 4 | 602 M | 17,734 | idle 74 %, `udevadm` 11 %, `sh` 2 %, udev workers |
+| 5 | 265 M | 7,696 | idle 61 %, `sha256sum` 31 % (three PIDs), `systemd-udevd`, `systemd` |
+
+- **The whole capture as a timeline:** `ss-t10-real-6s/tasks.perfetto-trace` (0.9 MB) holds 22,292 task runs on six tracks (Perfetto: 0 import errors).
+  - Idle until 2.7 s; the scenario from 2.9 s.
+  - The udev-worker storm at 5.2–5.7 s: 70–84 different tasks per 100 ms, about 90 % of all six cores busy.
+- **Detail anywhere in it:**
+  ```
+  tracetool.py cut ss-t10-real-6s ss-t10-storm --ms 5300 5320
+  tracetool.py index ss-t10-storm
+  tracetool.py perfetto ss-t10-storm --window 5300 5320
+  ```
+  - The cut is two chunks (32 MB) with the parent's time axis (`timebase.txt`); it produced 893,716 slices.
+  - In those 20 ms: `sha256sum` on core 0; a dozen udev workers and `systemd-udevd` switching on cores 1–4; short-lived children on core 5. Those are PIDs 1023–1029, gone before the 0.2 s name collector saw them, so they show as `?`.
+- **The overflows are real** (`TRACE_ON [overflow]`), 7,000–17,700 per core, all in the busy phases.
+  - In one 27 ms chunk at 620 MB/s, cores 1 and 2 lost trace 231 and 276 times.
+  - Bursts from several cores running dense code at once overrun the shared path (a 16 KB ETF FIFO, one ETR).
+  - The task timeline is unaffected: PIDs and timestamps keep coming. The instruction-level detail has holes.
+  - **Next:**
+    - stop tracing user code (TRCVICTLR EL0 exclusion), which can't be decoded without its images yet takes much of the bandwidth;
+    - or ETM stall (TRCSTALLCTLR).
+
 ## 9. Lessons
 
 1. **Check the decode against the code, not just "no errors".** One loop with a known
@@ -259,6 +307,8 @@ PC:     ./ocd.sh read 0xf1000000 0x1000000 trace/etr-t9.bin
    gives each core a different end.
 5. **Decode against the memory as it is, not the file it came from.** Self-patching code
    (alternatives, static keys) is invisible until the call stacks drift.
-6. **Trace a real system before drawing conclusions from a picture.** Pinned synthetic loops
+6. **Read a big capture out through the board's own USB, not the debug port:** 41 MiB/s against 266 KiB/s.
+   Then summarise all of it and cut out windows for detail; nothing opens 6 s of six cores whole.
+7. **Trace a real system before drawing conclusions from a picture.** Pinned synthetic loops
    look synthetic: idle cores, task switches, interrupts and user code without images are what a
    real trace is made of.

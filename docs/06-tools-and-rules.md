@@ -19,9 +19,11 @@
 | `board/mkdtb.sh` | the session DTB; `TRACE=1`, `I2CGPIO=1` |
 | `board/physwin.c` | copy, read, write or checksum physical memory through `/dev/mem` (no-map regions only) |
 | `board/scenario-real.sh [done]` | real work for a trace on the board's own image (sha256sum over `/usr`, udevadm, journalctl, systemctl), a PID map and `/proc/interrupts` before and after |
+| `board/usbexport.sh PHYS LEN \| stop` | on the board (`/mnt`): a trace buffer as a read-only USB disk on the board's USB-C (41 MiB/s) |
+| `trace/usbget.sh OUT` | on the PC: read that disk into OUT, with its speed and SHA-256 |
 | `board/i2cbang.sh SDA SCL ADDR` | one I2C address probe clocked by hand through GPIO2, printing every pin state |
 | `trace/mksnap.py` | OpenCSD snapshot + decode + per-function instruction counts; `--cores`, `--kernel-live`, `--pids` |
-| `trace/tracetool.py` | index (per core, per task), Perfetto (protobuf or JSON), speedscope, folded stacks, `nav`; `--window` |
+| `trace/tracetool.py` | index (per core, per task), Perfetto (protobuf or JSON), speedscope, folded stacks, `nav`; `--window`; `summary` and `cut` for captures too big to index |
 | `frmd-imx95-pro/` | the board's documents: UM12527, the QSG, NXP's design files (schematic netlist, BOM, layout, Gerbers), the annotated pictures |
 
 External pieces, all in the elb1 repo:
@@ -65,6 +67,7 @@ SM_PORT=/dev/ttyACM3 smmon.py reset
 10. **The full trace decode is about 300 MB of text per MB of trace.** `mksnap.py` keeps 2,000 lines and the summary.
 11. **Stop a multi-core trace at the sink** (`cs_multi_stop`): stopping the ETMs one by one takes ~1.8 ms each over the CH347F and gives every core a different end ([04](04-arm-trace-into-dram.md) §7.1).
 12. **Decode against the live kernel text** (`ocd.sh ktext`, `mksnap.py --kernel-live`), read again after a kernel rebuild. Linux patches 0.4 % of its text at boot; against `vmlinux` the call stacks drift ([04](04-arm-trace-into-dram.md) §8.1).
+13. **Read big captures through the board's USB** (`usbexport.sh`, `usbget.sh`), not the debug port: 41 MiB/s against 266 KiB/s. Process them with `tracetool.py summary`, and `cut` windows for detail.
 
 ## Where things are (outside this directory)
 

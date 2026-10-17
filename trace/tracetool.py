@@ -11,6 +11,10 @@
   tracetool.py speedscope SNAP [-o FILE] [--window FROM TO]   speedscope evented profile
   tracetool.py folded SNAP [-o FILE] [--window FROM TO]       folded stacks (flame graphs)
   tracetool.py nav SNAP [N] [--core C]            step through the recorded history, forward AND back
+  tracetool.py summary SNAP [--chunk-mb 16]       a capture too big to index (hundreds of MB): chunks x
+                                                   cores in parallel -> time per task, folded stacks,
+                                                   every task over the whole capture in Perfetto
+  tracetool.py cut SNAP OUT --ms FROM TO          a window of a big capture as its own snapshot
 --window FROM TO: milliseconds from the capture's start (the first traced instruction of any core),
 the same axis as the Perfetto timeline and index's span table.
 
@@ -23,7 +27,7 @@ Time: CPU cycle counts (TRCCONFIGR.CCI) if the trace has them, else TIMESTAMP el
 (TRCCONFIGR.TS) interpolated by instruction count; without either, the axis is instructions, shown
 as ns at --gips (default 2.5 G instructions/s, measured for dd).
 """
-import argparse, array, bisect, glob, json, multiprocessing, os, re, subprocess, sys
+import argparse, array, bisect, glob, json, multiprocessing, os, re, shutil, subprocess, sys
 import numpy as np
 
 OCSD = '/home/zk47/Project/5.elb1-t113/11.tmp/opencsd/trc_pkt_lister.sh'
@@ -322,8 +326,10 @@ def _index_source(job):
 
 
 def capture_start(cores):
-    """time 0 of every view: the earliest traced instruction of any core"""
-    return min(ix.t_ns(int(ix.r[0, 3])) for ix in cores.values() if len(ix.r))
+    """time 0 of every view: the earliest traced instruction of any core, or, for a piece cut out of
+    a bigger capture (tracetool.py cut), that capture's own time 0 (SNAP/timebase.txt)"""
+    tb = next(iter(cores.values())).tb
+    return tb if tb is not None else min(ix.t_ns(int(ix.r[0, 3])) for ix in cores.values() if len(ix.r))
 
 
 def coverage(snap):
@@ -380,10 +386,13 @@ def load(snap, gips):
         return np.column_stack([np.zeros(len(v), np.int64), v]) if v.shape[1] == 2 else v
     ts, cc = per_core('ts'), per_core('cc')
     cm = comms(snap)
+    tbf = os.path.join(snap, 'timebase.txt')
+    tb = float(open(tbf).read()) if os.path.exists(tbf) else None
     out = {}
     for c in sorted(set(int(x) for x in rows[:, 8])):
         out[c] = CoreIndex(c, rows[rows[:, 8] == c][:, [0, 1, 2, 3, 4, 5, 6, 7, 9]], ts[ts[:, 0] == c][:, 1:],
                            cc[cc[:, 0] == c][:, 1:], names, gips, cm)
+        out[c].tb = tb
     return out
 
 
@@ -392,6 +401,7 @@ class CoreIndex:
     def __init__(self, core, rows, ts, cc, names, gips, cm=None):
         self.core, self.r, self.ts, self.cc, self.names, self.gips = core, rows, ts, cc, names, gips
         self.comms = cm or {}
+        self.tb = None            # the time 0 of the capture this was cut from (load(): timebase.txt)
         self.unit = None
         if len(self.ts) >= 2 and self.ts[-1, 1] > self.ts[0, 1]:
             self.unit = 'ETM timestamps (system counter x 256)'
@@ -642,12 +652,16 @@ def cmd_folded(a):
         kinds.add(_fold(ix, agg, a, 'core %d' % c if len(cores) > 1 else None))
     ix0 = next(iter(cores.values()))
     out = a.o or os.path.join(a.snap, 'trace.folded')
-    with open(out, 'w') as fo:
-        for (prefix, pid, stack), v in sorted(agg.items(), key=lambda x: -x[1]):
-            fo.write('%s %d\n' % (';'.join(([prefix] if prefix else []) + ([task_name(pid, ix0.comms)] if pid >= 0 else [])
-                                           + [ix0.name(g) for g in stack]), round(v)))
+    _write_folded(out, agg, ix0.name, ix0.comms)
     print('%d stacks over %d core(s), weighted by %s -> %s (flamegraph.pl, or speedscope)' % (
         len(agg), len(cores), '/'.join(sorted(kinds)), out))
+
+
+def _write_folded(out, agg, name, cm):
+    with open(out, 'w') as fo:
+        for (prefix, pid, stack), v in sorted(agg.items(), key=lambda x: -x[1]):
+            fo.write('%s %d\n' % (';'.join(([prefix] if prefix else []) + ([task_name(pid, cm)] if pid >= 0 else [])
+                                           + [name(g) for g in stack]), round(v)))
 
 
 def _fold(ix, agg, a, prefix):
@@ -668,6 +682,169 @@ def _fold(ix, agg, a, prefix):
         k = (prefix, pid, tuple(stack))     # names joined once per distinct stack, at the end
         agg[k] = agg.get(k, 0) + w
     return 'CPU cycles' if cyc else 'instructions'
+
+
+_COMMS = {}   # set before the summary workers fork
+
+
+def _summary_job(job):
+    """one chunk of the buffer, one trace source: decoded, then reduced to what the whole capture
+    needs (the rows themselves are dropped)"""
+    k, cdir, tid = job
+    r = _index_source((cdir, tid, 0, 0))
+    out = {'k': k, 'core': r['core'], 'n': 0, 'gaps': len(r['gaps']), 'ts': None, 'runs': np.zeros((0, 3)),
+           'folded': {}, 'unit': None}
+    rows = r['rows']
+    if len(r['ts']):
+        out['ts'] = (int(r['ts'][0, 2]), int(r['ts'][-1, 2]))
+    if not len(rows):
+        return out
+    ix = CoreIndex(r['core'], rows[:, [0, 1, 2, 3, 4, 5, 6, 7, 9]], r['ts'][:, 1:], r['cc'][:, 1:], _SYMS.name, 2.5,
+                   _COMMS)
+    out['n'] = int(rows[rows[:, 6] >= F_UNKNOWN, 2].sum())
+    out['unit'] = ix.unit
+    t0, t1, pid = ix.tasks()
+    out['runs'] = np.column_stack([t0, t1, pid.astype(np.float64)]) if len(pid) else out['runs']
+    _fold(ix, out['folded'], argparse.Namespace(instructions=False), 'core %d' % r['core'])
+    return out
+
+
+def _compact_folded(folded, cm, name, min_share=1e-6):
+    """Whole-capture stacks rooted at the program's name: all its PIDs and all cores together. Stacks
+    under a millionth of the total are dropped: every overflow and chunk edge restarts the stacks
+    part-way, and T10's 76,000 of them made 925 MB of distinct partial stacks."""
+    agg = {}
+    for (prefix, pid, stack), v in folded.items():
+        root = ('idle' if pid == 0 else cm.get(pid, '?')) if pid >= 0 else '?'
+        k = ';'.join([root] + [cm.get(F_USER - g, '?') + ' (user code)' if F_TASK < g <= F_USER else name(g)
+                               for g in stack])
+        agg[k] = agg.get(k, 0) + v
+    tot = sum(agg.values())
+    return {k: v for k, v in agg.items() if v >= tot * min_share}, tot
+
+
+def cmd_summary(a):
+    """A capture too big to index whole (hundreds of MB of trace: billions of rows). The buffer is
+    cut into chunks; every chunk x trace source is decoded in its own process and reduced at once to
+    time per task, instructions, overflows and folded stacks. Each chunk starts mid-stream: the
+    decoder waits for that source's next sync point (every 4 KB of its trace) and the call stacks
+    start again, as after an overflow. Writes SNAP/summary.json (the chunks' byte and time ranges,
+    for 'cut'), SNAP/tasks.perfetto-trace (every task on every core over the whole capture) and
+    SNAP/trace.folded."""
+    global _SYMS, _COMMS
+    _SYMS, _COMMS = Syms(a.snap), comms(a.snap)
+    data = os.path.join(a.snap, 'cstrace.bin')
+    size, ch = os.path.getsize(data), a.chunk_mb << 20
+    nch = (size + ch - 1) // ch
+    cdir = os.path.join(a.snap, 'chunks')
+    links = [f for f in os.listdir(a.snap) if f.endswith('.ini') or f == 'pids.txt' or
+             (f.endswith('.bin') and f != 'cstrace.bin')]
+    with open(data, 'rb') as fi:
+        for k in range(nch):
+            d = os.path.join(cdir, '%04d' % k)
+            os.makedirs(d, exist_ok=True)
+            for f in links:
+                if not os.path.lexists(os.path.join(d, f)):
+                    os.symlink(os.path.join('..', '..', f), os.path.join(d, f))
+            fi.seek(k * ch)
+            open(os.path.join(d, 'cstrace.bin'), 'wb').write(fi.read(ch))
+    jobs = [(k, os.path.join(cdir, '%04d' % k), tid) for k in range(nch) for tid in trace_ids(a.snap)]
+    print('%d bytes of trace: %d chunks of %d MB x %d sources = %d jobs on %d processes' % (
+        size, nch, a.chunk_mb, len(trace_ids(a.snap)), len(jobs), a.jobs))
+    res = []
+    with multiprocessing.get_context('fork').Pool(a.jobs) as pool:
+        for i, r in enumerate(pool.imap_unordered(_summary_job, jobs)):
+            res.append(r)
+            if (i + 1) % max(1, len(jobs) // 10) == 0:
+                print('  %d / %d' % (i + 1, len(jobs)), flush=True)
+    if not a.keep:
+        shutil.rmtree(cdir)
+
+    ts_all = [r['ts'] for r in res if r['ts']]
+    t0 = min(t for t, _ in ts_all) / 6.144              # ns: the capture's first timestamp
+    chunks = []
+    for k in range(nch):
+        tk = [r['ts'] for r in res if r['k'] == k and r['ts']]
+        if tk:
+            chunks.append([k, k * ch, min(ch, size - k * ch), round(min(t for t, _ in tk) / 6.144e6 - t0 / 1e6, 3),
+                           round(max(t for _, t in tk) / 6.144e6 - t0 / 1e6, 3)])
+    json.dump({'t0_ns': t0, 'size': size, 'chunk_bytes': ch, 'chunks': chunks},
+              open(os.path.join(a.snap, 'summary.json'), 'w'), indent=1)
+
+    cores = sorted(set(r['core'] for r in res))
+    folded, runs = {}, {}
+    print('core  instructions  overflows  time per task (CONTEXTIDR_EL2 = PID; idle [0] includes WFI)')
+    for c in cores:
+        rc = [r for r in res if r['core'] == c]
+        for r in rc:
+            for key, v in r['folded'].items():
+                folded[key] = folded.get(key, 0) + v
+        rr = np.concatenate([r['runs'] for r in rc]) if rc else np.zeros((0, 3))
+        rr = rr[np.argsort(rr[:, 0])] if len(rr) else rr
+        merged = []                                    # a run cut at a chunk boundary is one run
+        for s0, s1, p in rr.tolist():
+            if merged and merged[-1][2] == p and s0 - merged[-1][1] < 100e3:
+                merged[-1][1] = max(merged[-1][1], s1)
+            else:
+                merged.append([s0, s1, p])
+        runs[c] = merged
+        tot = {}
+        for s0, s1, p in merged:
+            tot[int(p)] = tot.get(int(p), 0) + s1 - s0
+        all_ = sum(tot.values()) or 1
+        if not tot and not sum(r['n'] for r in rc):
+            print('%4d  no trace (asleep, or off)' % c)
+            continue
+        print('%4d %13d %10d  %s' % (c, sum(r['n'] for r in rc), sum(r['gaps'] for r in rc), ', '.join(
+            '%s %.0f%%' % (task_name(p, _COMMS), 100.0 * d / all_) for p, d in sorted(tot.items(), key=lambda x: -x[1])[:6])))
+    for c in sorted(set(t - 0x10 for t in trace_ids(a.snap)) - set(cores)):
+        print('%4d  no trace (asleep, or off)' % c)
+    span = max(t for _, t in ts_all) / 6.144 - t0
+    print('capture: %.3f s of timestamps; %d task switches' % (span / 1e9, sum(len(v) for v in runs.values())))
+
+    tracks = []
+    for c in cores:
+        m = np.array(runs[c], dtype=np.float64).reshape(-1, 3)
+        n = len(m)
+        t = np.empty(2 * n, np.int64)
+        t[0::2], t[1::2] = np.round(m[:, 0] - t0), np.round(m[:, 1] - t0)
+        ev = (np.maximum.accumulate(np.maximum(t, 0)), np.tile(np.array([1, 0], np.int64), n),
+              np.repeat(F_TASK - m[:, 2].astype(np.int64), 2), np.full(2 * n, -1, np.int64), np.zeros(2 * n, np.int64))
+        tracks.append((20 + c, 'core %d tasks' % c, c, ev))
+    out = os.path.join(a.snap, 'tasks.perfetto-trace')
+    _write_proto(out, tracks, lambda f: label(f, _SYMS.name, _COMMS))
+    fo = os.path.join(a.snap, 'trace.folded')
+    agg, tot = _compact_folded(folded, _COMMS, lambda f: label(f, _SYMS.name, _COMMS))
+    with open(fo, 'w') as f_:
+        for k_, v in sorted(agg.items(), key=lambda x: -x[1]):
+            f_.write('%s %d\n' % (k_, round(v)))
+    print('folded stacks: %d of %d kept (those of at least a millionth of the total)' % (len(agg), len(folded)))
+    print('-> %s (every task on every core, the whole capture), %s, %s' % (out, fo, os.path.join(a.snap, 'summary.json')))
+    print("detail: tracetool.py cut %s OUT --ms FROM TO; tracetool.py index OUT; tracetool.py perfetto OUT --window FROM TO"
+          % a.snap)
+
+
+def cmd_cut(a):
+    """The chunks that cover FROM..TO ms (summary.json) as a snapshot of their own, on the same time
+    axis (timebase.txt): small enough to index and to open in Perfetto with every function."""
+    s = json.load(open(os.path.join(a.snap, 'summary.json')))
+    lo, hi = a.ms
+    ks = [c for c in s['chunks'] if c[4] >= lo and c[3] <= hi]
+    if not ks:
+        sys.exit('no chunk covers %g .. %g ms (the capture: %g .. %g ms)' % (lo, hi, s['chunks'][0][3], s['chunks'][-1][4]))
+    off, end = ks[0][1], ks[-1][1] + ks[-1][2]
+    os.makedirs(a.out, exist_ok=True)
+    src = os.path.abspath(a.snap)
+    for f in os.listdir(a.snap):
+        if f.endswith('.ini') or f == 'pids.txt' or (f.endswith('.bin') and f != 'cstrace.bin'):
+            if not os.path.lexists(os.path.join(a.out, f)):
+                os.symlink(os.path.join(src, f), os.path.join(a.out, f))
+    with open(os.path.join(a.snap, 'cstrace.bin'), 'rb') as fi:
+        fi.seek(off)
+        open(os.path.join(a.out, 'cstrace.bin'), 'wb').write(fi.read(end - off))
+    open(os.path.join(a.out, 'timebase.txt'), 'w').write('%r\n' % s['t0_ns'])
+    print('%s: bytes %#x..%#x of %s (chunks %d..%d: %g .. %g ms)' % (a.out, off, end, a.snap, ks[0][0], ks[-1][0],
+                                                                    ks[0][3], ks[-1][4]))
 
 
 def cmd_nav(a):
@@ -859,11 +1036,17 @@ def main():
                            help='proto: Perfetto\'s own format, compact (default); json: Chrome trace events')
         if c == 'folded':
             p.add_argument('--instructions', action='store_true', help='weight by instructions even with cycle counts')
+    p = sp.add_parser('summary'); p.add_argument('snap')
+    p.add_argument('--chunk-mb', type=int, default=16, help='chunk size (each chunk x core is one job)')
+    p.add_argument('--jobs', type=int, default=max(1, min(12, (os.cpu_count() or 2) - 2)))
+    p.add_argument('--keep', action='store_true', help='keep SNAP/chunks')
+    p = sp.add_parser('cut'); p.add_argument('snap'); p.add_argument('out')
+    p.add_argument('--ms', nargs=2, type=float, required=True, metavar=('FROM', 'TO'))
     p = sp.add_parser('nav'); p.add_argument('snap'); p.add_argument('n', nargs='?'); p.add_argument('--gips', type=float, default=2.5)
     p.add_argument('--core', type=int, help='which core to step through (default: the lowest traced)')
     a = ap.parse_args()
     {'index': cmd_index, 'perfetto': cmd_perfetto, 'speedscope': cmd_speedscope, 'folded': cmd_folded,
-     'nav': cmd_nav}[a.cmd](a)
+     'summary': cmd_summary, 'cut': cmd_cut, 'nav': cmd_nav}[a.cmd](a)
 
 
 if __name__ == '__main__':
